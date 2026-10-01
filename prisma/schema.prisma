@@ -76,6 +76,7 @@ model Organization {
   invitations OrganizationInvitation[]
   customers   Customer[]
   leads       Lead[]
+  pipelines   Pipeline[]
 }
 
 model OrganizationMembership {
@@ -163,14 +164,49 @@ model Lead {
   notes               String?
   convertedAt         DateTime?
   convertedCustomerId String?     @unique
+  pipelineStageId     String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedTo        User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
   convertedCustomer Customer?    @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+  // NoAction (not Restrict): checked at the end of the statement, so deleting an organization can
+  // still cascade to its leads and its stages in one statement, while a stage that holds a lead
+  // can never be deleted on its own.
+  pipelineStage     PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: NoAction)
 
   @@index([organizationId, createdAt])
   @@index([organizationId, status])
   @@index([organizationId, assignedToUserId])
+  @@index([pipelineStageId])
+}
+
+model Pipeline {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages       PipelineStage[]
+
+  @@unique([organizationId, name])
+}
+
+model PipelineStage {
+  id         String   @id @default(uuid())
+  pipelineId String
+  name       String
+  position   Int // 0-based and contiguous, assigned by the server
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads    Lead[]
+
+  @@unique([pipelineId, position])
+  @@unique([pipelineId, name])
 }
