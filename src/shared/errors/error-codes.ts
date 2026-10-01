@@ -44,6 +44,8 @@ export const ErrorCode = {
   PIPELINE_STAGE_IN_USE: "PIPELINE_STAGE_IN_USE",
   INVALID_STAGE_ORDER: "INVALID_STAGE_ORDER",
 
+  TASK_NOT_FOUND: "TASK_NOT_FOUND",
+
   FORBIDDEN: "FORBIDDEN",
   ROUTE_NOT_FOUND: "ROUTE_NOT_FOUND",
   INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
@@ -90,6 +92,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   PIPELINE_NOT_EMPTY: 409,
   PIPELINE_STAGE_IN_USE: 409,
   INVALID_STAGE_ORDER: 400,
+  TASK_NOT_FOUND: 404,
   FORBIDDEN: 403,
   ROUTE_NOT_FOUND: 404,
   INTERNAL_SERVER_ERROR: 500,
@@ -135,6 +138,7 @@ export const ERROR_DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   PIPELINE_NOT_EMPTY: "Delete the pipeline's stages before deleting the pipeline.",
   PIPELINE_STAGE_IN_USE: "Move the leads out of this stage before deleting it.",
   INVALID_STAGE_ORDER: "The stage ids must be exactly the stages of this pipeline, each once.",
+  TASK_NOT_FOUND: "Task not found.",
   FORBIDDEN: "You are not allowed to do this.",
   ROUTE_NOT_FOUND: "The requested route does not exist.",
   INTERNAL_SERVER_ERROR: "Something went wrong. Please try again later.",

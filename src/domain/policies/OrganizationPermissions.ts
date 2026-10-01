@@ -22,6 +22,11 @@ export const OrganizationPermission = {
   PIPELINE_DELETE: "pipeline:delete",
   PIPELINE_MANAGE_STAGES: "pipeline:manage_stages",
   PIPELINE_MOVE_LEAD: "pipeline:move_lead",
+  TASK_READ: "task:read",
+  TASK_CREATE: "task:create",
+  TASK_UPDATE: "task:update",
+  TASK_ASSIGN: "task:assign",
+  TASK_DELETE: "task:delete",
 } as const;
 
 export type OrganizationPermission =
@@ -41,6 +46,14 @@ const LEAD_MANAGE = [
   OrganizationPermission.LEAD_UPDATE,
   OrganizationPermission.LEAD_ASSIGN,
   OrganizationPermission.LEAD_CONVERT,
+] as const;
+
+/** Everything a MEMBER may do with tasks: everything except delete. */
+const TASK_MANAGE = [
+  OrganizationPermission.TASK_READ,
+  OrganizationPermission.TASK_CREATE,
+  OrganizationPermission.TASK_UPDATE,
+  OrganizationPermission.TASK_ASSIGN,
 ] as const;
 
 /** What every member may do with pipelines: look at them and move leads through them. */
@@ -71,6 +84,8 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.LEAD_DELETE,
     ...PIPELINE_USE,
     ...PIPELINE_MANAGE,
+    ...TASK_MANAGE,
+    OrganizationPermission.TASK_DELETE,
   ],
   ADMIN: [
     OrganizationPermission.ORGANIZATION_READ,
@@ -83,6 +98,8 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.LEAD_DELETE,
     ...PIPELINE_USE,
     ...PIPELINE_MANAGE,
+    ...TASK_MANAGE,
+    OrganizationPermission.TASK_DELETE,
   ],
   MEMBER: [
     OrganizationPermission.ORGANIZATION_READ,
@@ -90,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     ...CUSTOMER_MANAGE,
     ...LEAD_MANAGE,
     ...PIPELINE_USE,
+    ...TASK_MANAGE,
   ],
 };
 
