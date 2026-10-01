@@ -23,4 +23,7 @@ export interface RefreshTokenRepository {
 
   /** Revokes every not-yet-revoked token in the family. */
   revokeFamily(familyId: string): Promise<void>;
+
+  /** Revokes every not-yet-revoked token of the user, across all families. */
+  revokeAllForUser(userId: string): Promise<void>;
 }

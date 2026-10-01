@@ -156,3 +156,47 @@ describe("PrismaRefreshTokenRepository", () => {
     expect(await prisma.refreshToken.count()).toBe(0);
   });
 });
+
+describe("PrismaUserRepository: user management", () => {
+  it("creates users ACTIVE by default", async () => {
+    expect((await newUser()).status).toBe("ACTIVE");
+  });
+
+  it("updateProfile() changes only the name and bumps updatedAt", async () => {
+    const user = await newUser();
+    const updated = await users.updateProfile(user.id, { name: "Asha Rao" });
+    expect(updated).toMatchObject({ name: "Asha Rao", email: user.email, role: "USER" });
+    expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(user.updatedAt.getTime());
+  });
+
+  it("updatePassword() stores the new hash", async () => {
+    const user = await newUser();
+    await users.updatePassword(user.id, "new-hash");
+    expect((await users.findById(user.id))?.passwordHash).toBe("new-hash");
+  });
+
+  it("updateStatus() stores the status", async () => {
+    const user = await newUser();
+    expect((await users.updateStatus(user.id, "SUSPENDED")).status).toBe("SUSPENDED");
+    expect((await users.findById(user.id))?.status).toBe("SUSPENDED");
+  });
+});
+
+describe("PrismaRefreshTokenRepository.revokeAllForUser", () => {
+  it("revokes live tokens across all families of that user only, and keeps earlier revocation times", async () => {
+    const asha = await newUser();
+    const ravi = await newUser("ravi@example.com");
+    const a = newToken(asha.id);
+    const b = newToken(asha.id); // a different family
+    const c = newToken(ravi.id);
+    for (const t of [a, b, c]) await tokens.create(t);
+    const earlier = new Date(Date.now() - 3_600_000);
+    await prisma.refreshToken.update({ where: { id: b.id }, data: { revokedAt: earlier } });
+
+    await tokens.revokeAllForUser(asha.id);
+
+    expect((await tokens.findById(a.id))?.revokedAt).not.toBeNull();
+    expect((await tokens.findById(b.id))?.revokedAt?.getTime()).toBe(earlier.getTime());
+    expect((await tokens.findById(c.id))?.revokedAt).toBeNull();
+  });
+});

@@ -1,6 +1,8 @@
 import { User } from "../../../domain/entities/User";
+import { UserStatus } from "../../../domain/enums/UserStatus";
 import {
   CreateUserData,
+  UpdateUserData,
   UserRepository,
 } from "../../../domain/repositories/UserRepository";
 import { AppError } from "../../../shared/errors/AppError";
@@ -33,5 +35,17 @@ export class PrismaUserRepository implements UserRepository {
 
   findAll(): Promise<User[]> {
     return this.prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  }
+
+  updateProfile(userId: string, data: UpdateUserData): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { name: data.name } });
+  }
+
+  async updatePassword(userId: string, passwordHash: string): Promise<void> {
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  }
+
+  updateStatus(userId: string, status: UserStatus): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { status } });
   }
 }
