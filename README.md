@@ -14,6 +14,7 @@ Built with Node.js, Express 5, TypeScript, PostgreSQL, Prisma 7, Zod, JWT and bc
 - **Role-based access** (`USER`, `ADMIN`); the first admin is created by a tracked seed
 - One response envelope everywhere, with stable error codes
 - Tracked database **seeds** (`npm run seed:deploy`), alongside Prisma migrations
+- **User management:** profile, rename, password change (ends all sessions) and admin-controlled account status (`ACTIVE`, `SUSPENDED`, `DEACTIVATED`)
 - **Organizations:** create an organization, invite people with a one-time token, and manage members with per-organization roles (`OWNER`, `ADMIN`, `MEMBER`) that are checked against the database on every request
 
 ## Quick start
@@ -54,7 +55,10 @@ All routes are under `/api/v1`.
 | POST | `/auth/login` | none | Log in, receive tokens |
 | POST | `/auth/refresh` | refresh token | Rotate tokens |
 | POST | `/auth/logout` | refresh token | End the session |
-| GET | `/users/me` | access token | Current user |
+| GET | `/users/me` | access token | Profile |
+| PATCH | `/users/me` | access token | Update name |
+| POST | `/users/me/password` | access token | Change password (revokes all sessions) |
+| PATCH | `/users/:userId/status` | access token, `ADMIN` | Suspend, deactivate or reactivate a user |
 | GET | `/admin/users` | access token, `ADMIN` | List users |
 | POST | `/organizations` | access token | Create an organization (caller becomes `OWNER`) |
 | GET | `/organizations` | access token | List the caller's organizations |
@@ -91,7 +95,7 @@ Tokens are sent as `Authorization: Bearer <token>`. Full request and response de
 npm test
 ```
 
-232 tests: unit tests for the use cases, and integration tests that run the real app against a real PostgreSQL database through HTTP. The integration tests delete data, so they only run against a database whose name ends in `_test` (for example `backend_demo_test`; create it first). The test setup migrates it automatically and never touches your development database. See the documentation for details.
+274 tests: unit tests for the use cases, and integration tests that run the real app against a real PostgreSQL database through HTTP. The integration tests delete data, so they only run against a database whose name ends in `_test` (for example `backend_demo_test`; create it first). The test setup migrates it automatically and never touches your development database. See the documentation for details.
 
 ## Project structure
 
@@ -113,9 +117,11 @@ Business logic (`domain/`, `application/`) never imports Express, Prisma, `jsonw
 
 - [Authentication & Authorisation](documentation/authentication-and-authorisation.md): architecture, data model, token design, flows, full API reference, error codes, security model and limits, configuration, operations, client guide
 - [Organizations & Membership](documentation/organizations.md): roles and permissions, invitations, data model, flows, full API reference, security model and limits
+- [User Management](documentation/user-management.md): profile, account update, password change, account status and its effect on login and refresh
 - [Feature contract: authentication](docs/feature-contracts/20261001073651-authentication-authorization.md): the agreed specification this implementation follows
 - [Feature contract: organizations](docs/feature-contracts/20261001103000-organizations.md): the agreed specification for organizations
+- [Feature contract: user management](docs/feature-contracts/20261001120000-user-management.md): the agreed specification for user management
 
 ## Known limitations
 
-There is **no rate limiting or account lockout yet**, so login and registration can be brute-forced. This is the first thing to add before exposing the API publicly. The role is carried in the access token, so a role change or logout takes effect only after the current access token expires (up to 15 minutes). Organization membership and roles are the exception: they are not in the token and are read from the database on every organization request, so removals and role changes there apply immediately. The full list is in the documentation, section 8.
+There is **no rate limiting or account lockout yet**, so login and registration can be brute-forced. This is the first thing to add before exposing the API publicly. The role is carried in the access token, so a role change, logout, password change or suspension takes effect for already-issued access tokens only after the current access token expires (up to 15 minutes). Organization membership and roles are the exception: they are not in the token and are read from the database on every organization request, so removals and role changes there apply immediately. The full list is in the documentation, section 8.

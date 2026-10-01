@@ -3,7 +3,7 @@
 Official documentation for the authentication and authorisation feature of `backend-demo`: user registration and login, access and refresh tokens, refresh-token rotation, logout, and role-based access control.
 
 - **Specification:** [`docs/feature-contracts/20261001073651-authentication-authorization.md`](../docs/feature-contracts/20261001073651-authentication-authorization.md) is the agreed feature contract this implementation follows. This document describes what was built and how to use and operate it.
-- **Status:** implemented. The authentication tests are 115 of the project's 232; the rest cover [Organizations & Membership](organizations.md), which builds on this feature without changing it.
+- **Status:** implemented. The authentication tests are 115 of the project's 274; the rest cover [Organizations & Membership](organizations.md) and [User Management](user-management.md), which build on this feature without changing its contracts. User Management adds `User.status`, a status check in login and refresh, and the codes `ACCOUNT_SUSPENDED` and `ACCOUNT_DEACTIVATED`.
 
 ## Contents
 
@@ -113,6 +113,7 @@ Defined in `prisma/schema.prisma`; created by migration `20261001080000_init_aut
 | `email` | text | **Unique.** Stored trimmed and lowercased. |
 | `passwordHash` | text | bcrypt hash. Never returned by any endpoint. |
 | `role` | enum `USER` \| `ADMIN` | Default `USER` |
+| `status` | enum `ACTIVE` \| `SUSPENDED` \| `DEACTIVATED` | Default `ACTIVE`. See [User Management](user-management.md). |
 | `createdAt`, `updatedAt` | timestamp | |
 
 ### `RefreshToken`
@@ -309,7 +310,7 @@ Malformed JSON gives `details: { "body": "Request body must be valid JSON." }`. 
 | POST | `/auth/login` | none | Log in, receive tokens |
 | POST | `/auth/refresh` | refresh token | Rotate tokens |
 | POST | `/auth/logout` | refresh token | End the session |
-| GET | `/users/me` | access token | Current user |
+| GET | `/users/me` | access token | Current user (also `PATCH /users/me`, `POST /users/me/password`, `PATCH /users/:userId/status`: see [User Management](user-management.md)) |
 | GET | `/admin/users` | access token, `ADMIN` | List all users |
 
 The organization endpoints (`/organizations/...` and `/organization-invitations/accept`) are documented in [Organizations & Membership](organizations.md#6-api-reference).
@@ -418,9 +419,11 @@ curl -X POST http://localhost:3000/api/v1/auth/logout \
 curl http://localhost:3000/api/v1/users/me -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-**200:** `data: { "user": { id, name, email, role } }`, read from the database.
+**200:** `data: { "user": { id, name, email, role, status, createdAt, updatedAt } }`, read from the database.
 
 **Errors:** `401 UNAUTHORIZED` (no or malformed header), `401 INVALID_ACCESS_TOKEN`, `401 ACCESS_TOKEN_EXPIRED`, `404 USER_NOT_FOUND` (valid token, deleted account).
+
+Login and refresh also return `403 ACCOUNT_SUSPENDED` / `403 ACCOUNT_DEACTIVATED` for a blocked account; login only after the password is verified.
 
 ### 6.8 `GET /api/v1/admin/users`
 
@@ -448,6 +451,8 @@ Requires an access token whose role is `ADMIN`.
 | `VALIDATION_ERROR` | 400 | Body or header fails validation, or the JSON is malformed or too large |
 | `EMAIL_ALREADY_EXISTS` | 409 | Registration with a taken email |
 | `INVALID_CREDENTIALS` | 401 | Wrong email or password |
+| `ACCOUNT_SUSPENDED` | 403 | Login or refresh for a suspended account |
+| `ACCOUNT_DEACTIVATED` | 403 | Login or refresh for a deactivated account |
 | `USER_NOT_FOUND` | 404 | `/users/me` for a deleted user |
 | `UNAUTHORIZED` | 401 | No `Bearer` header on a protected route |
 | `INVALID_ACCESS_TOKEN` | 401 | Access token malformed, bad signature, wrong type, or unknown role |
@@ -457,6 +462,7 @@ Requires an access token whose role is `ADMIN`.
 | `REFRESH_TOKEN_REVOKED` | 401 | Session ended |
 | `REFRESH_TOKEN_REUSED` | 401 | Replay detected; session revoked |
 | `FORBIDDEN` | 403 | Authenticated but the role is not allowed |
+| `INVALID_CURRENT_PASSWORD`, `USER_ALREADY_SUSPENDED`, `USER_ALREADY_DEACTIVATED`, `INVALID_USER_STATUS`, `CANNOT_CHANGE_OWN_STATUS` | 400 / 409 / 403 | See [User Management](user-management.md#5-error-codes) |
 | `ORGANIZATION_NOT_FOUND` | 404 | The organization does not exist or the caller is not a member |
 | `INSUFFICIENT_ORGANIZATION_PERMISSION` | 403 | A member lacks the permission or does not outrank the target |
 | `MEMBERSHIP_NOT_FOUND` | 404 | The target user is not a member of the organization |
@@ -491,13 +497,13 @@ Requires an access token whose role is `ADMIN`.
 | Limit | Impact | Mitigation / next step |
 |---|---|---|
 | **No rate limiting or account lockout** | Login and registration can be brute-forced or spammed | **Highest-priority follow-up.** Add per-IP and per-account limits. |
-| **Role in the access token (D1)** | Role changes and logout take effect only after the access token expires (≤15 min) | Shorten the access TTL, or add a per-request role/session check in `authenticate`. |
+| **Role in the access token (D1)** | Role changes, logout, password change and suspension take effect only after the access token expires (≤15 min); refresh is cut off at once | Shorten the access TTL, or add a per-request role/session check in `authenticate`. |
 | **Registration reveals existing emails** | Account enumeration through `EMAIL_ALREADY_EXISTS` | Return a generic response and confirm by email, once email exists. |
 | **Strict refresh retries** | A client that retries a refresh after a network timeout can trigger reuse detection and lose its session | Add a short grace window for just-rotated tokens. |
 | **No cap on session lifetime** | A client that keeps refreshing stays signed in indefinitely | Add an absolute family lifetime. |
 | **No cleanup of old tokens** | `RefreshToken` rows accumulate | Add a periodic purge of expired and revoked rows. |
 | **No email verification or password reset** | | Out of scope for this feature. |
-| **Admin role changes need the database** | No endpoint promotes or demotes users | The first admin comes from the seed; further changes are a new seed or a future endpoint. |
+| **Admin role changes need the database** | No endpoint promotes or demotes users (`PATCH /users/:userId/status` changes status only) | The first admin comes from the seed; further changes are a new seed or a future endpoint. |
 | **Tokens returned in the JSON body** | The client is responsible for storing the refresh token safely | Consider httpOnly cookies for browser-only clients. |
 
 ---
@@ -613,7 +619,7 @@ The build compiles the seeds to `dist/prisma/seeds/*.js`, and the runner accepts
 
 ### Tests
 
-`npm test` runs 232 tests in 11 files (115 for authentication and the seed runner in 7 files, 117 for [organizations](organizations.md#12-tests) in 4):
+`npm test` runs 274 tests (115 for authentication and the seed runner, 117 for [organizations](organizations.md#12-tests), 42 for [user management](user-management.md)):
 
 | Suite | What it covers |
 |---|---|
