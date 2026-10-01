@@ -2,6 +2,7 @@ import { Router } from "express";
 import { UserRole } from "../domain/enums/UserRole";
 import { OrganizationPermission } from "../domain/policies/OrganizationPermissions";
 import { AuthController } from "../infrastructure/http/controllers/AuthController";
+import { CustomerController } from "../infrastructure/http/controllers/CustomerController";
 import { HealthController } from "../infrastructure/http/controllers/HealthController";
 import { OrganizationController } from "../infrastructure/http/controllers/OrganizationController";
 import { UserController } from "../infrastructure/http/controllers/UserController";
@@ -18,6 +19,7 @@ export function createRoutes(container: Container, logger: Logger): Router {
   const auth = new AuthController(container, logger);
   const users = new UserController(container, logger);
   const organizations = new OrganizationController(container, logger);
+  const customers = new CustomerController(container, logger);
   const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
   const requireMembership = requireOrganizationMembership(container.organizationMemberships);
@@ -77,6 +79,23 @@ export function createRoutes(container: Container, logger: Logger): Router {
     requireMembership,
     requireOrganizationPermission(OrganizationPermission.MEMBER_REMOVE),
     organizations.removeMember,
+  );
+
+  // Customers belong to one organization. The same membership lookup guards them, and the
+  // organization id used by the use cases comes from that lookup, not from the body.
+  router.post(
+    "/organizations/:organizationId/customers",
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.CUSTOMER_CREATE),
+    customers.create,
+  );
+  router.get(
+    "/organizations/:organizationId/customers/:customerId",
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.CUSTOMER_READ),
+    customers.get,
   );
 
   return router;

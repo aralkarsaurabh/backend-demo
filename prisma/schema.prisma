@@ -73,6 +73,7 @@ model Organization {
 
   memberships OrganizationMembership[]
   invitations OrganizationInvitation[]
+  customers   Customer[]
 }
 
 model OrganizationMembership {
@@ -108,4 +109,21 @@ model OrganizationInvitation {
   @@index([organizationId])
   @@index([email])
   // The migration also adds a hand-written partial unique index: one open invitation per (organizationId, email).
+}
+
+model Customer {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
 }

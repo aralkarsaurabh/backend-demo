@@ -12,11 +12,14 @@ import { ListOrganizationMembers } from "../application/use-cases/organization/L
 import { ListUserOrganizations } from "../application/use-cases/organization/ListUserOrganizations";
 import { RemoveOrganizationMember } from "../application/use-cases/organization/RemoveOrganizationMember";
 import { UpdateOrganizationMemberRole } from "../application/use-cases/organization/UpdateOrganizationMemberRole";
+import { CreateCustomer } from "../application/use-cases/customer/CreateCustomer";
+import { GetCustomer } from "../application/use-cases/customer/GetCustomer";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
 import { UpdateUserStatus } from "../application/use-cases/user/UpdateUserStatus";
 import { GetCurrentUser } from "../application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../application/use-cases/user/ListUsers";
+import { CustomerRepository } from "../domain/repositories/CustomerRepository";
 import { OrganizationInvitationRepository } from "../domain/repositories/OrganizationInvitationRepository";
 import { OrganizationMembershipRepository } from "../domain/repositories/OrganizationMembershipRepository";
 import { OrganizationRepository } from "../domain/repositories/OrganizationRepository";
@@ -29,6 +32,7 @@ export interface Dependencies {
   organizations: OrganizationRepository;
   organizationMemberships: OrganizationMembershipRepository;
   organizationInvitations: OrganizationInvitationRepository;
+  customers: CustomerRepository;
   passwords: PasswordService;
   tokens: TokenService;
 }
@@ -40,6 +44,7 @@ export function buildContainer({
   organizations,
   organizationMemberships,
   organizationInvitations,
+  customers,
   passwords,
   tokens,
 }: Dependencies) {
@@ -75,6 +80,8 @@ export function buildContainer({
     listOrganizationMembers: new ListOrganizationMembers(organizationMemberships),
     updateOrganizationMemberRole: new UpdateOrganizationMemberRole(organizationMemberships),
     removeOrganizationMember: new RemoveOrganizationMember(organizationMemberships),
+    createCustomer: new CreateCustomer(customers),
+    getCustomer: new GetCustomer(customers),
   };
 }
 

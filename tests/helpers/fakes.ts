@@ -17,6 +17,10 @@ import { UpdateCurrentUser } from "../../src/application/use-cases/user/UpdateCu
 import { UpdateUserStatus } from "../../src/application/use-cases/user/UpdateUserStatus";
 import { GetCurrentUser } from "../../src/application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../../src/application/use-cases/user/ListUsers";
+import { Customer } from "../../src/domain/entities/Customer";
+import { CreateCustomerData, CustomerRepository } from "../../src/domain/repositories/CustomerRepository";
+import { CreateCustomer } from "../../src/application/use-cases/customer/CreateCustomer";
+import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
 import { Organization } from "../../src/domain/entities/Organization";
 import { OrganizationInvitation } from "../../src/domain/entities/OrganizationInvitation";
 import {
@@ -185,6 +189,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
   const organizations = new InMemoryOrganizationRepository(orgData);
   const memberships = new InMemoryOrganizationMembershipRepository(orgData, users);
   const invitations = new InMemoryOrganizationInvitationRepository(orgData);
+  const customers = new InMemoryCustomerRepository();
 
   return {
     users,
@@ -195,6 +200,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     organizations,
     memberships,
     invitations,
+    customers,
     register: new RegisterUser(users, passwords),
     login: new LoginUser(users, refreshTokens, passwords, tokens),
     refresh: new RefreshTokens(users, refreshTokens, tokens),
@@ -218,6 +224,8 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     listOrganizationMembers: new ListOrganizationMembers(memberships),
     updateOrganizationMemberRole: new UpdateOrganizationMemberRole(memberships),
     removeOrganizationMember: new RemoveOrganizationMember(memberships),
+    createCustomer: new CreateCustomer(customers),
+    getCustomer: new GetCustomer(customers),
   };
 }
 
@@ -383,5 +391,32 @@ export class InMemoryOrganizationInvitationRepository implements OrganizationInv
       updatedAt: now,
     });
     return true;
+  }
+}
+
+/** Like the Prisma repository, every method is scoped to one organization. */
+export class InMemoryCustomerRepository implements CustomerRepository {
+  readonly customers: Customer[] = [];
+
+  async create(organizationId: string, data: CreateCustomerData) {
+    const now = new Date();
+    const customer: Customer = {
+      id: randomUUID(),
+      organizationId,
+      name: data.name,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      company: data.company ?? null,
+      notes: data.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.customers.push(customer);
+    return { ...customer };
+  }
+
+  async findById(organizationId: string, customerId: string) {
+    const row = this.customers.find((c) => c.id === customerId && c.organizationId === organizationId);
+    return row ? { ...row } : null;
   }
 }

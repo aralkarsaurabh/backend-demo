@@ -30,6 +30,8 @@ export const ErrorCode = {
   INVITATION_EXPIRED: "INVITATION_EXPIRED",
   INVALID_INVITATION: "INVALID_INVITATION",
 
+  CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
+
   FORBIDDEN: "FORBIDDEN",
   ROUTE_NOT_FOUND: "ROUTE_NOT_FOUND",
   INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
@@ -65,6 +67,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INVITATION_ALREADY_EXISTS: 409,
   INVITATION_EXPIRED: 410,
   INVALID_INVITATION: 400,
+  CUSTOMER_NOT_FOUND: 404,
   FORBIDDEN: 403,
   ROUTE_NOT_FOUND: 404,
   INTERNAL_SERVER_ERROR: 500,
@@ -99,6 +102,7 @@ export const ERROR_DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   INVITATION_ALREADY_EXISTS: "An open invitation for this email already exists.",
   INVITATION_EXPIRED: "This invitation has expired. Ask for a new one.",
   INVALID_INVITATION: "This invitation is not valid.",
+  CUSTOMER_NOT_FOUND: "Customer not found.",
   FORBIDDEN: "You are not allowed to do this.",
   ROUTE_NOT_FOUND: "The requested route does not exist.",
   INTERNAL_SERVER_ERROR: "Something went wrong. Please try again later.",

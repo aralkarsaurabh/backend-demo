@@ -5,6 +5,7 @@ import { buildContainer } from "../../src/app/container";
 import { BcryptPasswordService } from "../../src/infrastructure/authentication/BcryptPasswordService";
 import { JwtTokenService } from "../../src/infrastructure/authentication/JwtTokenService";
 import { createPrismaClient } from "../../src/infrastructure/database/prisma";
+import { PrismaCustomerRepository } from "../../src/infrastructure/database/repositories/PrismaCustomerRepository";
 import { PrismaOrganizationInvitationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
 import { PrismaOrganizationMembershipRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
 import { PrismaOrganizationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationRepository";
@@ -25,6 +26,7 @@ export function buildIntegrationApp() {
     organizations: new PrismaOrganizationRepository(prisma),
     organizationMemberships: new PrismaOrganizationMembershipRepository(prisma),
     organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
+    customers: new PrismaCustomerRepository(prisma),
     passwords: new BcryptPasswordService(4),
     tokens,
   });
@@ -35,6 +37,7 @@ export function buildIntegrationApp() {
 export type IntegrationApp = ReturnType<typeof buildIntegrationApp>;
 
 export async function resetDatabase(prisma: IntegrationApp["prisma"]) {
+  await prisma.customer.deleteMany();
   await prisma.organizationInvitation.deleteMany();
   await prisma.organizationMembership.deleteMany();
   await prisma.organization.deleteMany();
@@ -113,4 +116,29 @@ export async function joinOrganization(
     .set(bearer(member.accessToken))
     .send({ token });
   return member;
+}
+
+type Org = Awaited<ReturnType<typeof createOrganization>>;
+
+/** Creates a customer through the API as `actor` and returns it. */
+export async function createCustomer(
+  ctx: IntegrationApp,
+  actor: SignedUp,
+  org: Org,
+  body: Record<string, unknown> = { name: "Acme Technologies" },
+) {
+  const res = await ctx.api
+    .post(`/api/v1/organizations/${org.id}/customers`)
+    .set(bearer(actor.accessToken))
+    .send(body);
+  return res.body.data.customer as {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    company: string | null;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
 }

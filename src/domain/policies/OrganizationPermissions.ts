@@ -6,10 +6,21 @@ export const OrganizationPermission = {
   MEMBER_INVITE: "member:invite",
   MEMBER_REMOVE: "member:remove",
   MEMBER_UPDATE_ROLE: "member:update_role",
+  CUSTOMER_READ: "customer:read",
+  CUSTOMER_CREATE: "customer:create",
+  CUSTOMER_UPDATE: "customer:update",
+  CUSTOMER_DELETE: "customer:delete",
 } as const;
 
 export type OrganizationPermission =
   (typeof OrganizationPermission)[keyof typeof OrganizationPermission];
+
+/** Everything a MEMBER may do with customers: everything except delete. */
+const CUSTOMER_MANAGE = [
+  OrganizationPermission.CUSTOMER_READ,
+  OrganizationPermission.CUSTOMER_CREATE,
+  OrganizationPermission.CUSTOMER_UPDATE,
+] as const;
 
 /** Roles map to permissions in code; there is no database-configurable RBAC. */
 export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPermission[]> = {
@@ -19,14 +30,22 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.MEMBER_INVITE,
     OrganizationPermission.MEMBER_REMOVE,
     OrganizationPermission.MEMBER_UPDATE_ROLE,
+    ...CUSTOMER_MANAGE,
+    OrganizationPermission.CUSTOMER_DELETE,
   ],
   ADMIN: [
     OrganizationPermission.ORGANIZATION_READ,
     OrganizationPermission.MEMBER_READ,
     OrganizationPermission.MEMBER_INVITE,
     OrganizationPermission.MEMBER_REMOVE,
+    ...CUSTOMER_MANAGE,
+    OrganizationPermission.CUSTOMER_DELETE,
   ],
-  MEMBER: [OrganizationPermission.ORGANIZATION_READ, OrganizationPermission.MEMBER_READ],
+  MEMBER: [
+    OrganizationPermission.ORGANIZATION_READ,
+    OrganizationPermission.MEMBER_READ,
+    ...CUSTOMER_MANAGE,
+  ],
 };
 
 export function hasPermission(role: OrganizationRole, permission: OrganizationPermission) {
