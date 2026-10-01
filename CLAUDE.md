@@ -1,9 +1,9 @@
 # backend-demo
 
-Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`).
+Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`), plus multi-tenant organizations (membership, invitations, `OWNER`/`ADMIN`/`MEMBER`).
 
-- User-facing docs: `README.md` and `documentation/authentication-and-authorisation.md` (keep both in sync when behaviour changes).
-- Spec: `docs/feature-contracts/20261001073651-authentication-authorization.md`.
+- User-facing docs: `README.md`, `documentation/authentication-and-authorisation.md` and `documentation/organizations.md` (keep them in sync when behaviour changes).
+- Specs: `docs/feature-contracts/20261001073651-authentication-authorization.md` and `docs/feature-contracts/20261001103000-organizations.md`.
 
 ## Commands
 
@@ -11,7 +11,7 @@ Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and author
 |---|---|
 | `npm run dev` | Run with `tsx watch` |
 | `npm run typecheck` | `tsc --noEmit`. Run before committing; it also checks `tests/`. |
-| `npm test` | All tests (115). Needs the `_test` database to exist, see below. |
+| `npm test` | All tests (232). Needs the `_test` database to exist, see below. |
 | `npm run prisma:generate` | Required after a fresh install and after any `schema.prisma` change. The client in `generated/prisma` is git-ignored. |
 | `npx prisma migrate deploy` | The **only** way schema migrations are applied |
 | `npm run seed:deploy` | The **only** way seeds are applied |
@@ -35,6 +35,8 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 - Refresh tokens: JWT `jti` equals the `RefreshToken.id`; only a SHA-256 hash is stored; no `role` claim. `familyId` groups a login's tokens.
 - Rotation (`RefreshTokenRepository.rotate`) must stay a single transaction with a `WHERE revokedAt IS NULL` guard. Reuse of a rotated token (`replacedBy` set) revokes the whole family. Strict on purpose: no grace window for retries.
 - Login must give the same response for unknown email and wrong password, and run a dummy bcrypt compare for unknown emails.
+- **Organizations (see the organizations contract, D5-D10):** the JWT never carries organization data; `requireOrganizationMembership()` reads the membership from the DB on every request (D5). One `OWNER` per organization for life, enforced by a partial unique index (D6). Invitation tokens are returned once and stored only as SHA-256 (D7). Non-members get `404 ORGANIZATION_NOT_FOUND`, never 403 (D9). A platform `ADMIN` has no special organization access (D10). Do not add a way to assign `OWNER`.
+- Atomic organization operations are single repository methods (`createWithOwner`, invitation `accept`, guarded `updateRole`/`remove`), so use cases never manage transactions. The real-SQL tests in `tests/integration/organization-repositories.test.ts` prove each guard fails when removed; keep them.
 
 ## Migrations and seeds
 
@@ -61,6 +63,7 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 - **TypeScript 6:** `moduleResolution: Node` is removed (tsconfig uses `Node16`), and `@types/*` are no longer auto-included (tsconfig sets `"types": ["node"]`).
 - **Prisma 7:** the database URL lives in `prisma.config.ts` (not `schema.prisma`) and the client needs the `pg` driver adapter. Keep `prisma` and `@prisma/client` on the same version (both 7.10.0, pinned).
 - **Never run `npx prisma init`** here. It is already set up, and it drops Prisma agent-skill folders (`.agents/`, `.claude/`, `.windsurf/`, `skills-lock.json`) into the repo.
+- `prisma migrate dev` fails with `P3014` here (the DB user cannot create the shadow database). Generate migration SQL with `npx prisma migrate diff --from-schema <old schema from git> --to-schema prisma/schema.prisma --script` and put it in a new `prisma/migrations/<timestamp>_<name>/migration.sql`. The two partial unique indexes in `add_organizations` are hand-written SQL; Prisma does not see them as drift.
 - `randomUUID()` returns a template-literal type; annotate variables as `string` when passing them around in tests.
 - The shell tool here is `zsh`: bash-only syntax (`${VAR^^}`) fails and unquoted variable arrays are not word-split. Put scripts in a file and run them with `bash`.
 - Two access tokens issued for the same user in the same second are identical (no `jti` on access tokens). That is expected.
@@ -68,10 +71,11 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 
 ## Known gaps (see documentation section 8)
 
-No rate limiting or lockout (first thing to add before public exposure), no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles.
+No rate limiting or lockout (first thing to add before public exposure; it also covers invitation creation/acceptance), no email delivery, invitation revoke/list, ownership transfer or pagination for organizations, no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles.
 
 ## Feature Contracts
 
 | File | Status | Read On |
 |---|---|---|
 | 20261001073651-authentication-authorization.md | Read | 2026-10-01 |
+| 20261001103000-organizations.md | Read | 2026-10-01 |

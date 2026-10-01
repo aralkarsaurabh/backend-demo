@@ -3,7 +3,7 @@
 Official documentation for the authentication and authorisation feature of `backend-demo`: user registration and login, access and refresh tokens, refresh-token rotation, logout, and role-based access control.
 
 - **Specification:** [`docs/feature-contracts/20261001073651-authentication-authorization.md`](../docs/feature-contracts/20261001073651-authentication-authorization.md) is the agreed feature contract this implementation follows. This document describes what was built and how to use and operate it.
-- **Status:** implemented and covered by 115 automated tests.
+- **Status:** implemented. The authentication tests are 115 of the project's 232; the rest cover [Organizations & Membership](organizations.md), which builds on this feature without changing it.
 
 ## Contents
 
@@ -68,8 +68,8 @@ src/
 │   ├── app.ts                    builds the Express app
 │   ├── container.ts              the single place where use cases get their dependencies
 │   ├── routes.ts                 route table
-│   ├── middleware/               authenticate, authorize, error + 404 handlers
-│   └── types/express.d.ts        adds req.user
+│   ├── middleware/               authenticate, authorize, organization membership/permission, error + 404 handlers
+│   └── types/express.d.ts        adds req.user and req.organizationMembership
 ├── config/                   env validation, constants (TTLs, field limits)
 ├── domain/                   entities, UserRole enum, repository interfaces
 ├── application/
@@ -77,10 +77,11 @@ src/
 │   ├── services/                 TokenService and PasswordService interfaces
 │   └── use-cases/                RegisterUser, LoginUser, RefreshTokens, LogoutUser,
 │                                 GetCurrentUser, ListUsers
+│                                 (organization/ use cases: see organizations.md)
 ├── infrastructure/
 │   ├── authentication/           JwtTokenService, BcryptPasswordService
 │   ├── database/                 Prisma client, Prisma repositories, seed runner
-│   └── http/controllers/         AuthController, UserController
+│   └── http/controllers/         AuthController, UserController, OrganizationController
 ├── shared/                   error codes, AppError, response envelope, logger, validation helper
 └── server.ts                 process entry point
 prisma/
@@ -101,7 +102,7 @@ tests/                        unit/, integration/, helpers/, setup/
 
 ## 3. Data model
 
-Defined in `prisma/schema.prisma`; created by migration `20261001080000_init_auth`.
+Defined in `prisma/schema.prisma`; created by migration `20261001080000_init_auth`. The organization tables (`Organization`, `OrganizationMembership`, `OrganizationInvitation`) were added later by their own migration and are documented in [organizations.md](organizations.md#4-data-model); `User` only gained relations to them.
 
 ### `User`
 
@@ -191,6 +192,7 @@ Consequences to be aware of:
 - Logout cannot invalidate an access token that was already issued; it stays valid until it expires.
 - `GET /users/me` always reads the database, so it shows the current role even when the token's role is stale.
 - A refresh always issues an access token with the user's **current** role from the database.
+- The token carries only this **platform** role. Organization membership and organization roles are never in the token; they are read from the database on every organization request (decision D5 in [organizations.md](organizations.md#2-decisions)).
 
 If these limits are not acceptable for a given deployment, the fix is a per-request role lookup in `authenticate`; see [section 8](#8-security-model-and-known-limits).
 
@@ -309,6 +311,8 @@ Malformed JSON gives `details: { "body": "Request body must be valid JSON." }`. 
 | POST | `/auth/logout` | refresh token | End the session |
 | GET | `/users/me` | access token | Current user |
 | GET | `/admin/users` | access token, `ADMIN` | List all users |
+
+The organization endpoints (`/organizations/...` and `/organization-invitations/accept`) are documented in [Organizations & Membership](organizations.md#6-api-reference).
 
 ### 6.3 `POST /api/v1/auth/register`
 
@@ -453,6 +457,15 @@ Requires an access token whose role is `ADMIN`.
 | `REFRESH_TOKEN_REVOKED` | 401 | Session ended |
 | `REFRESH_TOKEN_REUSED` | 401 | Replay detected; session revoked |
 | `FORBIDDEN` | 403 | Authenticated but the role is not allowed |
+| `ORGANIZATION_NOT_FOUND` | 404 | The organization does not exist or the caller is not a member |
+| `INSUFFICIENT_ORGANIZATION_PERMISSION` | 403 | A member lacks the permission or does not outrank the target |
+| `MEMBERSHIP_NOT_FOUND` | 404 | The target user is not a member of the organization |
+| `MEMBERSHIP_ALREADY_EXISTS` | 409 | Inviting or accepting for someone who is already a member |
+| `CANNOT_REMOVE_OWNER` | 403 | Removing the organization's `OWNER` |
+| `CANNOT_CHANGE_OWNER_ROLE` | 403 | Changing the `OWNER`'s role |
+| `INVITATION_ALREADY_EXISTS` | 409 | An open invitation for that email already exists |
+| `INVITATION_EXPIRED` | 410 | A valid invitation token past its expiry |
+| `INVALID_INVITATION` | 400 | Unknown or already-accepted invitation token, or the caller's email is not the invited one |
 | `ROUTE_NOT_FOUND` | 404 | No such route |
 | `INTERNAL_SERVER_ERROR` | 500 | Unexpected failure. Details are logged, never returned. |
 
@@ -600,7 +613,7 @@ The build compiles the seeds to `dist/prisma/seeds/*.js`, and the runner accepts
 
 ### Tests
 
-`npm test` runs 115 tests in 7 files:
+`npm test` runs 232 tests in 11 files (115 for authentication and the seed runner in 7 files, 117 for [organizations](organizations.md#12-tests) in 4):
 
 | Suite | What it covers |
 |---|---|
@@ -608,6 +621,7 @@ The build compiles the seeds to `dist/prisma/seeds/*.js`, and the runner accepts
 | `tests/integration/*.http.test.ts` | The real app on the real database through Supertest: validation, envelope, token claims, attack cases, RBAC, rotation, reuse, races, logout |
 | `tests/integration/repositories.test.ts` | The Prisma repositories, including `rotate()` under many simultaneous callers |
 | `tests/integration/seed.test.ts` | The seed runner, the admin seed, and the real `seed:deploy` script |
+| `tests/unit/organization*.test.ts`, `tests/integration/organization*.test.ts` | Organizations & Membership; see [organizations.md](organizations.md#12-tests) |
 
 **Test database.** The integration tests delete data, so they run only against a database whose name ends in `_test` and refuse otherwise. Create one first (for example `backend_demo_test`); the test setup applies migrations to it automatically and points `DATABASE_URL` at it for the whole run, so a test can never touch the development database. The files run one at a time because they share that database.
 
@@ -636,6 +650,7 @@ Events are written to the console as one JSON object per line:
 | `refresh` | `ip`, `userAgent` |
 | `refresh_reuse_detected` | `ip`, `userAgent` |
 | `logout` | `ip`, `userAgent` |
+| Organization events (`organization_created`, `member_invited`, `invitation_accepted`, ...) | see [organizations.md](organizations.md#11-logging) |
 | `unhandled_error` | `method`, `path`, `error` |
 | `server_started`, `server_stopping` | `port` / `signal` |
 

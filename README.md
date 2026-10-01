@@ -1,6 +1,6 @@
 # backend-demo
 
-A backend API for **authentication and authorisation**: user registration and login, short-lived access tokens, rotating refresh tokens with reuse detection, logout, and role-based access control.
+A backend API for **authentication and authorisation**: user registration and login, short-lived access tokens, rotating refresh tokens with reuse detection, logout, role-based access control, and multi-tenant organizations with invitations and organization-level roles.
 
 Built with Node.js, Express 5, TypeScript, PostgreSQL, Prisma 7, Zod, JWT and bcrypt, structured as Clean Architecture so business logic stays independent of the framework, database and libraries.
 
@@ -14,6 +14,7 @@ Built with Node.js, Express 5, TypeScript, PostgreSQL, Prisma 7, Zod, JWT and bc
 - **Role-based access** (`USER`, `ADMIN`); the first admin is created by a tracked seed
 - One response envelope everywhere, with stable error codes
 - Tracked database **seeds** (`npm run seed:deploy`), alongside Prisma migrations
+- **Organizations:** create an organization, invite people with a one-time token, and manage members with per-organization roles (`OWNER`, `ADMIN`, `MEMBER`) that are checked against the database on every request
 
 ## Quick start
 
@@ -55,6 +56,14 @@ All routes are under `/api/v1`.
 | POST | `/auth/logout` | refresh token | End the session |
 | GET | `/users/me` | access token | Current user |
 | GET | `/admin/users` | access token, `ADMIN` | List users |
+| POST | `/organizations` | access token | Create an organization (caller becomes `OWNER`) |
+| GET | `/organizations` | access token | List the caller's organizations |
+| GET | `/organizations/:organizationId` | member | One organization |
+| POST | `/organizations/:organizationId/invitations` | `OWNER`, `ADMIN` | Invite someone; returns the one-time token |
+| GET | `/organizations/:organizationId/members` | member | List members |
+| PATCH | `/organizations/:organizationId/members/:userId` | `OWNER` | Change a member's role |
+| DELETE | `/organizations/:organizationId/members/:userId` | `OWNER`, `ADMIN` (rank rules apply) | Remove a member |
+| POST | `/organization-invitations/accept` | access token | Accept an invitation |
 
 Tokens are sent as `Authorization: Bearer <token>`. Full request and response details, error codes and a client integration guide are in the documentation.
 
@@ -82,14 +91,14 @@ Tokens are sent as `Authorization: Bearer <token>`. Full request and response de
 npm test
 ```
 
-115 tests: unit tests for the use cases, and integration tests that run the real app against a real PostgreSQL database through HTTP. The integration tests delete data, so they only run against a database whose name ends in `_test` (for example `backend_demo_test`; create it first). The test setup migrates it automatically and never touches your development database. See the documentation for details.
+232 tests: unit tests for the use cases, and integration tests that run the real app against a real PostgreSQL database through HTTP. The integration tests delete data, so they only run against a database whose name ends in `_test` (for example `backend_demo_test`; create it first). The test setup migrates it automatically and never touches your development database. See the documentation for details.
 
 ## Project structure
 
 ```
 src/
   app/              Express wiring: app, routes, middleware, composition root
-  domain/           entities, role enum, repository interfaces
+  domain/           entities, role enums, permission policy, repository interfaces
   application/      DTOs, service interfaces, use cases
   infrastructure/   Prisma repositories, JWT and bcrypt services, controllers, seed runner
   config/ shared/   env validation, constants, errors, response envelope, logger
@@ -103,8 +112,10 @@ Business logic (`domain/`, `application/`) never imports Express, Prisma, `jsonw
 ## Documentation
 
 - [Authentication & Authorisation](documentation/authentication-and-authorisation.md): architecture, data model, token design, flows, full API reference, error codes, security model and limits, configuration, operations, client guide
-- [Feature contract](docs/feature-contracts/20261001073651-authentication-authorization.md): the agreed specification this implementation follows
+- [Organizations & Membership](documentation/organizations.md): roles and permissions, invitations, data model, flows, full API reference, security model and limits
+- [Feature contract: authentication](docs/feature-contracts/20261001073651-authentication-authorization.md): the agreed specification this implementation follows
+- [Feature contract: organizations](docs/feature-contracts/20261001103000-organizations.md): the agreed specification for organizations
 
 ## Known limitations
 
-There is **no rate limiting or account lockout yet**, so login and registration can be brute-forced. This is the first thing to add before exposing the API publicly. The role is carried in the access token, so a role change or logout takes effect only after the current access token expires (up to 15 minutes). The full list is in the documentation, section 8.
+There is **no rate limiting or account lockout yet**, so login and registration can be brute-forced. This is the first thing to add before exposing the API publicly. The role is carried in the access token, so a role change or logout takes effect only after the current access token expires (up to 15 minutes). Organization membership and roles are the exception: they are not in the token and are read from the database on every organization request, so removals and role changes there apply immediately. The full list is in the documentation, section 8.
