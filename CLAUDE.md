@@ -83,3 +83,4 @@ No rate limiting or lockout (first thing to add before public exposure; it also 
 | 20261001103000-organizations.md | Read | 2026-10-01 |
 | 20261001120000-user-management.md | Read | 2026-10-01 |
 | 20261001150000-customer-management.md | Read | 2026-10-01 |
+| 20261001170000-lead-management.md | Read | 2026-10-01 |
