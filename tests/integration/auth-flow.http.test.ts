@@ -233,7 +233,15 @@ describe("GET /api/v1/users/me and access-token handling", () => {
 
     expect(res.status).toBe(200);
     expectEnvelope(res.body, true);
-    expect(res.body.data.user).toEqual({ id: user.id, name: "Asha", email: "asha@example.com", role: "USER" });
+    expect(res.body.data.user).toEqual({
+      id: user.id,
+      name: "Asha",
+      email: "asha@example.com",
+      role: "USER",
+      status: "ACTIVE",
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
   });
 
   it("requires a Bearer token: none, wrong scheme and empty all give UNAUTHORIZED", async () => {

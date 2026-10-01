@@ -12,6 +12,9 @@ import { ListOrganizationMembers } from "../../src/application/use-cases/organiz
 import { ListUserOrganizations } from "../../src/application/use-cases/organization/ListUserOrganizations";
 import { RemoveOrganizationMember } from "../../src/application/use-cases/organization/RemoveOrganizationMember";
 import { UpdateOrganizationMemberRole } from "../../src/application/use-cases/organization/UpdateOrganizationMemberRole";
+import { ChangePassword } from "../../src/application/use-cases/user/ChangePassword";
+import { UpdateCurrentUser } from "../../src/application/use-cases/user/UpdateCurrentUser";
+import { UpdateUserStatus } from "../../src/application/use-cases/user/UpdateUserStatus";
 import { GetCurrentUser } from "../../src/application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../../src/application/use-cases/user/ListUsers";
 import { Organization } from "../../src/domain/entities/Organization";
@@ -24,6 +27,7 @@ import { RefreshToken } from "../../src/domain/entities/RefreshToken";
 import { User } from "../../src/domain/entities/User";
 import { OrganizationRole } from "../../src/domain/enums/OrganizationRole";
 import { UserRole } from "../../src/domain/enums/UserRole";
+import { UserStatus } from "../../src/domain/enums/UserStatus";
 import {
   NewOrganizationInvitation,
   OrganizationInvitationRepository,
@@ -40,6 +44,7 @@ import {
 } from "../../src/domain/repositories/RefreshTokenRepository";
 import {
   CreateUserData,
+  UpdateUserData,
   UserRepository,
 } from "../../src/domain/repositories/UserRepository";
 import { JwtTokenService } from "../../src/infrastructure/authentication/JwtTokenService";
@@ -68,6 +73,7 @@ export class InMemoryUserRepository implements UserRepository {
       email: data.email,
       passwordHash: data.passwordHash,
       role: data.role ?? UserRole.USER,
+      status: UserStatus.ACTIVE,
       createdAt: now,
       updatedAt: now,
     };
@@ -77,6 +83,32 @@ export class InMemoryUserRepository implements UserRepository {
 
   async findAll() {
     return [...this.users];
+  }
+
+  private require(userId: string) {
+    const user = this.users.find((u) => u.id === userId);
+    if (!user) throw new AppError(ErrorCode.USER_NOT_FOUND);
+    return user;
+  }
+
+  async updateProfile(userId: string, data: UpdateUserData) {
+    const user = this.require(userId);
+    user.name = data.name;
+    user.updatedAt = new Date();
+    return { ...user };
+  }
+
+  async updatePassword(userId: string, passwordHash: string) {
+    const user = this.require(userId);
+    user.passwordHash = passwordHash;
+    user.updatedAt = new Date();
+  }
+
+  async updateStatus(userId: string, status: UserStatus) {
+    const user = this.require(userId);
+    user.status = status;
+    user.updatedAt = new Date();
+    return { ...user };
   }
 }
 
@@ -113,6 +145,12 @@ export class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
   async revokeFamily(familyId: string) {
     for (const row of this.rows.values()) {
       if (row.familyId === familyId && !row.revokedAt) row.revokedAt = new Date();
+    }
+  }
+
+  async revokeAllForUser(userId: string) {
+    for (const row of this.rows.values()) {
+      if (row.userId === userId && !row.revokedAt) row.revokedAt = new Date();
     }
   }
 
@@ -163,6 +201,9 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     logout: new LogoutUser(refreshTokens, tokens),
     getCurrentUser: new GetCurrentUser(users),
     listUsers: new ListUsers(users),
+    updateCurrentUser: new UpdateCurrentUser(users),
+    changePassword: new ChangePassword(users, refreshTokens, passwords),
+    updateUserStatus: new UpdateUserStatus(users, refreshTokens),
     createOrganization: new CreateOrganization(organizations),
     listUserOrganizations: new ListUserOrganizations(organizations),
     getOrganization: new GetOrganization(organizations),

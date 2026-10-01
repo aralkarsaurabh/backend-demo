@@ -13,6 +13,9 @@ describe("GetCurrentUser", () => {
       name: "Asha",
       email: "asha@example.com",
       role: "USER",
+      status: "ACTIVE",
+      createdAt: app.users.users[0].createdAt.toISOString(),
+      updatedAt: app.users.users[0].updatedAt.toISOString(),
     });
     expect(JSON.stringify(result)).not.toMatch(/password/i);
   });
