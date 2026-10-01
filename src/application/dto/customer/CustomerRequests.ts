@@ -8,14 +8,14 @@ export const CUSTOMER_PHONE_MAX_LENGTH = 30;
 export const CUSTOMER_COMPANY_MAX_LENGTH = 150;
 export const CUSTOMER_NOTES_MAX_LENGTH = 1000;
 
-const text = (label: string, max: number) =>
+export const text = (label: string, max: number) =>
   z
     .string({ error: `${label} must be text.` })
     .trim()
     .min(1, `${label} must not be empty.`)
     .max(max, `${label} must be at most ${max} characters.`);
 
-const nameField = z
+export const nameField = z
   .string({ error: "Name is required." })
   .trim()
   .transform((name) => name.replace(/\s+/g, " "))
