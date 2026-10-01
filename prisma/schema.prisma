@@ -32,6 +32,7 @@ model User {
   memberships     OrganizationMembership[]
   invitationsSent OrganizationInvitation[]
   assignedLeads   Lead[]
+  assignedTasks   Task[]
 }
 
 model RefreshToken {
@@ -77,6 +78,7 @@ model Organization {
   customers   Customer[]
   leads       Lead[]
   pipelines   Pipeline[]
+  tasks       Task[]
 }
 
 model OrganizationMembership {
@@ -209,4 +211,31 @@ model PipelineStage {
 
   @@unique([pipelineId, position])
   @@unique([pipelineId, name])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Task {
+  id               String     @id @default(uuid())
+  organizationId   String
+  title            String
+  description      String?
+  assignedToUserId String?
+  dueDate          DateTime?
+  status           TaskStatus @default(TODO)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo   User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, dueDate])
 }
