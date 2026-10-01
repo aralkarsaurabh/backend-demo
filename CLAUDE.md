@@ -11,7 +11,7 @@ Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and author
 |---|---|
 | `npm run dev` | Run with `tsx watch` |
 | `npm run typecheck` | `tsc --noEmit`. Run before committing; it also checks `tests/`. |
-| `npm test` | All tests (274). Needs the `_test` database to exist, see below. |
+| `npm test` | All tests (430). Needs the `_test` database to exist, see below. |
 | `npm run prisma:generate` | Required after a fresh install and after any `schema.prisma` change. The client in `generated/prisma` is git-ignored. |
 | `npx prisma migrate deploy` | The **only** way schema migrations are applied |
 | `npm run seed:deploy` | The **only** way seeds are applied |
@@ -36,6 +36,7 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 - Rotation (`RefreshTokenRepository.rotate`) must stay a single transaction with a `WHERE revokedAt IS NULL` guard. Reuse of a rotated token (`replacedBy` set) revokes the whole family. Strict on purpose: no grace window for retries.
 - Login must give the same response for unknown email and wrong password, and run a dummy bcrypt compare for unknown emails.
 - **User management (see the user-management contract, D11-D15):** `User.status` is a platform property and affects authentication only. Suspend/deactivate revokes all refresh tokens (`revokeAllForUser`) but D1 stays: no status read in `authenticate()`. Login reveals a blocked status only after a correct password. An admin cannot change their own status. Password change revokes all refresh tokens. Do not add email or role to `PATCH /users/me`.
+- **Customers (see the customer contract, D16-D23):** a customer belongs to one organization, and every `CustomerRepository` method takes `organizationId` and filters on it. Access comes from the organization membership, never `User.role`. A customer of another organization is `404 CUSTOMER_NOT_FOUND`. The body never carries `organizationId` (strict schemas). Sorting is a whitelist, the list order always ends in `id`, and search escapes `%` and `_` (Prisma's `contains` does not). Hard delete. The real-SQL tests in `tests/integration/customer-repositories.test.ts` prove each guard fails when removed; keep them.
 - **Organizations (see the organizations contract, D5-D10):** the JWT never carries organization data; `requireOrganizationMembership()` reads the membership from the DB on every request (D5). One `OWNER` per organization for life, enforced by a partial unique index (D6). Invitation tokens are returned once and stored only as SHA-256 (D7). Non-members get `404 ORGANIZATION_NOT_FOUND`, never 403 (D9). A platform `ADMIN` has no special organization access (D10). Do not add a way to assign `OWNER`.
 - Atomic organization operations are single repository methods (`createWithOwner`, invitation `accept`, guarded `updateRole`/`remove`), so use cases never manage transactions. The real-SQL tests in `tests/integration/organization-repositories.test.ts` prove each guard fails when removed; keep them.
 
@@ -72,7 +73,7 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 
 ## Known gaps (see documentation section 8)
 
-No rate limiting or lockout (first thing to add before public exposure; it also covers invitation creation/acceptance), no email delivery, invitation revoke/list, ownership transfer or pagination for organizations, no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles, no email change, no immediate suspension of already-issued access tokens.
+No rate limiting or lockout (first thing to add before public exposure; it also covers invitation creation/acceptance), no email delivery, invitation revoke/list, ownership transfer or pagination for organizations, no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles, no email change, no immediate suspension of already-issued access tokens, customer search has no trigram or full-text index, and customers have no soft delete, uniqueness rule or audit history.
 
 ## Feature Contracts
 

@@ -21,7 +21,7 @@
 | Name | Customer Management |
 | Module | customer |
 | Priority | P1 |
-| Status | Agreed v1 |
+| Status | Agreed v1 (implemented) |
 | Owner | Saurabh Aralkar |
 | Backend assignee | Saurabh Aralkar |
 | Frontend assignee | N/A (no frontend in this repo) |
@@ -191,11 +191,11 @@ Authentication, User Management and Organizations (membership middleware and per
 ## 22. Definition of Done
 
 - [x] Contract agreed
-- [ ] Backend slices: create and get, list, update, delete
-- [ ] Tests green, including real-SQL isolation tests
-- [ ] Typecheck, build and architecture grep clean
-- [ ] `documentation/customers.md`, README and CLAUDE.md updated
-- [ ] One commit per slice
+- [x] Backend slices: create and get, list, update, delete
+- [x] Tests green, including real-SQL isolation tests
+- [x] Typecheck, build and architecture grep clean
+- [x] `documentation/customers.md`, README and CLAUDE.md updated
+- [x] One commit per slice
 
 ## 23. Future Improvements (out of scope for this pass)
 
