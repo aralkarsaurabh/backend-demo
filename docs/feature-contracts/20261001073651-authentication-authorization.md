@@ -317,6 +317,7 @@ model SeedMigration {
 | `REFRESH_TOKEN_REVOKED` | 401 | Token revoked by logout or family revocation |
 | `REFRESH_TOKEN_REUSED` | 401 | Already-rotated token presented; family revoked |
 | `FORBIDDEN` | 403 | Authenticated but role not permitted |
+| `ROUTE_NOT_FOUND` | 404 | No such route (added during implementation so unknown URLs also use the standard envelope) |
 | `INTERNAL_SERVER_ERROR` | 500 | Unexpected failure (internals never leaked) |
 
 ## 16. Frontend Behaviour

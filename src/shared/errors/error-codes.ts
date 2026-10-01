@@ -14,6 +14,7 @@ export const ErrorCode = {
   REFRESH_TOKEN_REUSED: "REFRESH_TOKEN_REUSED",
 
   FORBIDDEN: "FORBIDDEN",
+  ROUTE_NOT_FOUND: "ROUTE_NOT_FOUND",
   INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
 } as const;
 
@@ -32,6 +33,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   REFRESH_TOKEN_REVOKED: 401,
   REFRESH_TOKEN_REUSED: 401,
   FORBIDDEN: 403,
+  ROUTE_NOT_FOUND: 404,
   INTERNAL_SERVER_ERROR: 500,
 };
 
@@ -49,5 +51,6 @@ export const ERROR_DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   REFRESH_TOKEN_REUSED:
     "This refresh token was already used. You were signed out for security reasons.",
   FORBIDDEN: "You are not allowed to do this.",
+  ROUTE_NOT_FOUND: "The requested route does not exist.",
   INTERNAL_SERVER_ERROR: "Something went wrong. Please try again later.",
 };
