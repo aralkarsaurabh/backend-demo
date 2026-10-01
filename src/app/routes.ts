@@ -91,6 +91,13 @@ export function createRoutes(container: Container, logger: Logger): Router {
     customers.create,
   );
   router.get(
+    "/organizations/:organizationId/customers",
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.CUSTOMER_READ),
+    customers.list,
+  );
+  router.get(
     "/organizations/:organizationId/customers/:customerId",
     requireAuth,
     requireMembership,

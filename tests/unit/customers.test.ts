@@ -70,3 +70,65 @@ describe("GetCustomer", () => {
     });
   });
 });
+
+const defaults = { page: 1, limit: 20, sortBy: "createdAt", sortOrder: "desc" } as const;
+
+async function seed(app: ReturnType<typeof buildApp>, organizationId: string, count: number) {
+  for (let i = 1; i <= count; i++) {
+    await app.createCustomer.execute(organizationId, {
+      name: `Customer ${String(i).padStart(2, "0")}`,
+      notes: "private",
+    });
+  }
+}
+
+describe("ListCustomers", () => {
+  it("returns an empty page with totalPages 0 for an organization with no customers", async () => {
+    const app = buildApp();
+    expect(await app.listCustomers.execute(orgA, defaults)).toEqual({
+      customers: [],
+      pagination: { page: 1, limit: 20, totalItems: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+    });
+  });
+
+  it("works out the pagination fields", async () => {
+    const app = buildApp();
+    await seed(app, orgA, 25);
+
+    const first = await app.listCustomers.execute(orgA, { ...defaults, limit: 10 });
+    expect(first.customers).toHaveLength(10);
+    expect(first.pagination).toEqual({
+      page: 1, limit: 10, totalItems: 25, totalPages: 3, hasNextPage: true, hasPreviousPage: false,
+    });
+
+    const last = await app.listCustomers.execute(orgA, { ...defaults, limit: 10, page: 3 });
+    expect(last.customers).toHaveLength(5);
+    expect(last.pagination).toMatchObject({ page: 3, hasNextPage: false, hasPreviousPage: true });
+  });
+
+  it("returns an empty page, with the real totals, past the last page", async () => {
+    const app = buildApp();
+    await seed(app, orgA, 3);
+    const res = await app.listCustomers.execute(orgA, { ...defaults, page: 9 });
+    expect(res.customers).toEqual([]);
+    expect(res.pagination).toMatchObject({ totalItems: 3, totalPages: 1, hasNextPage: false, hasPreviousPage: true });
+  });
+
+  it("leaves notes and the organization id out of list items", async () => {
+    const app = buildApp();
+    await seed(app, orgA, 1);
+    const [item] = (await app.listCustomers.execute(orgA, defaults)).customers;
+    expect(Object.keys(item).sort()).toEqual(
+      ["company", "createdAt", "email", "id", "name", "phone", "updatedAt"],
+    );
+  });
+
+  it("never lists another organization's customers", async () => {
+    const app = buildApp();
+    await seed(app, orgA, 2);
+    await seed(app, orgB, 5);
+    const res = await app.listCustomers.execute(orgA, defaults);
+    expect(res.pagination.totalItems).toBe(2);
+    expect(res.customers).toHaveLength(2);
+  });
+});

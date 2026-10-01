@@ -18,8 +18,14 @@ import { UpdateUserStatus } from "../../src/application/use-cases/user/UpdateUse
 import { GetCurrentUser } from "../../src/application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../../src/application/use-cases/user/ListUsers";
 import { Customer } from "../../src/domain/entities/Customer";
-import { CreateCustomerData, CustomerRepository } from "../../src/domain/repositories/CustomerRepository";
+import {
+  CreateCustomerData,
+  CustomerListQuery,
+  CustomerPage,
+  CustomerRepository,
+} from "../../src/domain/repositories/CustomerRepository";
 import { CreateCustomer } from "../../src/application/use-cases/customer/CreateCustomer";
+import { ListCustomers } from "../../src/application/use-cases/customer/ListCustomers";
 import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
 import { Organization } from "../../src/domain/entities/Organization";
 import { OrganizationInvitation } from "../../src/domain/entities/OrganizationInvitation";
@@ -226,6 +232,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     removeOrganizationMember: new RemoveOrganizationMember(memberships),
     createCustomer: new CreateCustomer(customers),
     getCustomer: new GetCustomer(customers),
+    listCustomers: new ListCustomers(customers),
   };
 }
 
@@ -418,5 +425,40 @@ export class InMemoryCustomerRepository implements CustomerRepository {
   async findById(organizationId: string, customerId: string) {
     const row = this.customers.find((c) => c.id === customerId && c.organizationId === organizationId);
     return row ? { ...row } : null;
+  }
+
+  /** Mirrors the SQL: filters, a total order ending in id, then the page. */
+  async list(organizationId: string, query: CustomerListQuery): Promise<CustomerPage> {
+    const needle = query.search?.toLowerCase();
+    const has = (value: string | null) => value?.toLowerCase().includes(needle!) ?? false;
+    const matching = this.customers.filter(
+      (c) =>
+        c.organizationId === organizationId &&
+        (!query.company || c.company?.toLowerCase() === query.company.toLowerCase()) &&
+        (!query.createdFrom || c.createdAt >= query.createdFrom) &&
+        (!query.createdTo || c.createdAt <= query.createdTo) &&
+        (!needle || has(c.name) || has(c.email) || has(c.phone) || has(c.company)),
+    );
+
+    const dir = query.sortOrder === "asc" ? 1 : -1;
+    const key = (c: Customer) => {
+      const value = c[query.sortBy];
+      return value instanceof Date ? value.getTime() : value;
+    };
+    matching.sort((a, b) => {
+      const [x, y] = [key(a), key(b)];
+      if (x !== y) {
+        if (x === null) return 1; // empty values last, like nulls: "last"
+        if (y === null) return -1;
+        return (x < y ? -1 : 1) * dir;
+      }
+      return (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) * dir;
+    });
+
+    const start = (query.page - 1) * query.limit;
+    return {
+      items: matching.slice(start, start + query.limit).map((c) => ({ ...c })),
+      totalItems: matching.length,
+    };
   }
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUSTOMER_SORT_FIELDS } from "../../../domain/repositories/CustomerRepository";
 import { organizationParamsSchema } from "../organization/OrganizationRequests";
 import { emailField } from "../auth/RegisterRequest";
 
@@ -41,4 +42,46 @@ export const customerParamsSchema = organizationParamsSchema.extend({
   customerId: z.uuid({ error: "Customer id must be a valid id." }),
 });
 
+export const CUSTOMER_LIST_DEFAULT_LIMIT = 20;
+export const CUSTOMER_LIST_MAX_LIMIT = 100;
+export const CUSTOMER_SEARCH_MAX_LENGTH = 100;
+
+const startOfDay = (date: string) => new Date(`${date}T00:00:00.000Z`);
+const endOfDay = (date: string) => new Date(`${date}T23:59:59.999Z`);
+
+/** Query strings arrive as text: numbers are coerced, and only whitelisted sort fields pass. */
+export const customerListQuerySchema = z
+  .strictObject({
+    page: z.coerce
+      .number({ error: "Page must be a whole number." })
+      .int("Page must be a whole number.")
+      .min(1, "Page must be at least 1.")
+      .default(1),
+    limit: z.coerce
+      .number({ error: "Limit must be a whole number." })
+      .int("Limit must be a whole number.")
+      .min(1, "Limit must be at least 1.")
+      .max(CUSTOMER_LIST_MAX_LIMIT, `Limit must be at most ${CUSTOMER_LIST_MAX_LIMIT}.`)
+      .default(CUSTOMER_LIST_DEFAULT_LIMIT),
+    search: text("Search", CUSTOMER_SEARCH_MAX_LENGTH).optional(),
+    company: text("Company", CUSTOMER_COMPANY_MAX_LENGTH).optional(),
+    createdFrom: z.iso
+      .date({ error: "Created from must be a date like 2026-09-01." })
+      .transform(startOfDay)
+      .optional(),
+    createdTo: z.iso
+      .date({ error: "Created to must be a date like 2026-09-30." })
+      .transform(endOfDay)
+      .optional(),
+    sortBy: z
+      .enum(CUSTOMER_SORT_FIELDS, { error: `Sort by must be one of: ${CUSTOMER_SORT_FIELDS.join(", ")}.` })
+      .default("createdAt"),
+    sortOrder: z.enum(["asc", "desc"], { error: "Sort order must be asc or desc." }).default("desc"),
+  })
+  .refine(
+    (query) => !query.createdFrom || !query.createdTo || query.createdFrom <= query.createdTo,
+    { path: ["createdFrom"], message: "Created from must not be after created to." },
+  );
+
 export type CreateCustomerRequest = z.output<typeof createCustomerRequestSchema>;
+export type ListCustomersRequest = z.output<typeof customerListQuerySchema>;

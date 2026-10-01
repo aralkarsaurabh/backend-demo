@@ -13,6 +13,7 @@ import { ListUserOrganizations } from "../application/use-cases/organization/Lis
 import { RemoveOrganizationMember } from "../application/use-cases/organization/RemoveOrganizationMember";
 import { UpdateOrganizationMemberRole } from "../application/use-cases/organization/UpdateOrganizationMemberRole";
 import { CreateCustomer } from "../application/use-cases/customer/CreateCustomer";
+import { ListCustomers } from "../application/use-cases/customer/ListCustomers";
 import { GetCustomer } from "../application/use-cases/customer/GetCustomer";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
@@ -82,6 +83,7 @@ export function buildContainer({
     removeOrganizationMember: new RemoveOrganizationMember(organizationMemberships),
     createCustomer: new CreateCustomer(customers),
     getCustomer: new GetCustomer(customers),
+    listCustomers: new ListCustomers(customers),
   };
 }
 

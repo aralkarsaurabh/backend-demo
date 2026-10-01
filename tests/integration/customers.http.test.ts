@@ -217,3 +217,132 @@ describe("GET /organizations/:organizationId/customers/:customerId", () => {
     expectError(await api.get(path(org.id, created.id)), 401, "UNAUTHORIZED");
   });
 });
+
+describe("GET /organizations/:organizationId/customers", () => {
+  const list = (token: string, orgId: string, query = "") =>
+    api.get(`${path(orgId)}${query}`).set(bearer(token));
+
+  it("returns the first page, newest first, with pagination and without notes", async () => {
+    const { owner, member, org } = await setup();
+    for (const name of ["First", "Second", "Third"]) {
+      await createCustomer(ctx, owner, org, { name, notes: "private", company: "Acme" });
+    }
+
+    const res = await list(member.accessToken, org.id);
+    expect(res.status).toBe(200);
+    expectEnvelope(res.body, true);
+    expect(res.body.message).toBe("Customers retrieved successfully.");
+    expect(res.body.data.customers.map((c: any) => c.name)).toEqual(["Third", "Second", "First"]);
+    expect(res.body.data.customers[0]).toEqual({
+      id: expect.any(String),
+      name: "Third",
+      email: null,
+      phone: null,
+      company: "Acme",
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
+    expect(res.body.data.pagination).toEqual({
+      page: 1, limit: 20, totalItems: 3, totalPages: 1, hasNextPage: false, hasPreviousPage: false,
+    });
+  });
+
+  it("returns an empty list for an organization with no customers", async () => {
+    const { owner, org } = await setup();
+    const res = await list(owner.accessToken, org.id);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      customers: [],
+      pagination: { page: 1, limit: 20, totalItems: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+    });
+  });
+
+  it("pages through every customer once", async () => {
+    const { owner, org } = await setup();
+    for (let i = 1; i <= 5; i++) await createCustomer(ctx, owner, org, { name: `C${i}` });
+
+    const seen: string[] = [];
+    for (const page of [1, 2, 3]) {
+      const res = await list(owner.accessToken, org.id, `?page=${page}&limit=2`);
+      seen.push(...res.body.data.customers.map((c: any) => c.name));
+      expect(res.body.data.pagination).toMatchObject({
+        page, limit: 2, totalItems: 5, totalPages: 3, hasNextPage: page < 3, hasPreviousPage: page > 1,
+      });
+    }
+    expect([...seen].sort()).toEqual(["C1", "C2", "C3", "C4", "C5"]);
+  });
+
+  it("searches, filters by company and combines them", async () => {
+    const { owner, org } = await setup();
+    await createCustomer(ctx, owner, org, { name: "Acme North", company: "Acme", email: "n@x.io" });
+    await createCustomer(ctx, owner, org, { name: "Acme South", company: "Other" });
+    await createCustomer(ctx, owner, org, { name: "Beta", company: "Acme", phone: "555" });
+
+    const names = (res: any) => res.body.data.customers.map((c: any) => c.name).sort();
+    expect(names(await list(owner.accessToken, org.id, "?search=ACME"))).toEqual(["Acme North", "Acme South", "Beta"]);
+    expect(names(await list(owner.accessToken, org.id, "?search=555"))).toEqual(["Beta"]);
+    expect(names(await list(owner.accessToken, org.id, "?company=acme"))).toEqual(["Acme North", "Beta"]);
+    expect(names(await list(owner.accessToken, org.id, "?search=north&company=acme"))).toEqual(["Acme North"]);
+    expect(names(await list(owner.accessToken, org.id, "?search=south&company=acme"))).toEqual([]);
+  });
+
+  it("filters by created date", async () => {
+    const { owner, org } = await setup();
+    const old = await createCustomer(ctx, owner, org, { name: "Old" });
+    await createCustomer(ctx, owner, org, { name: "Recent" });
+    await prisma.customer.update({ where: { id: old.id }, data: { createdAt: new Date("2026-01-15T10:00:00Z") } });
+
+    const only = async (query: string) =>
+      (await list(owner.accessToken, org.id, query)).body.data.customers.map((c: any) => c.name);
+    expect(await only("?createdFrom=2026-01-15&createdTo=2026-01-15")).toEqual(["Old"]);
+    expect(await only("?createdTo=2026-01-31")).toEqual(["Old"]);
+    expect(await only("?createdFrom=2026-02-01")).toEqual(["Recent"]);
+  });
+
+  it("sorts by a whitelisted field and direction", async () => {
+    const { owner, org } = await setup();
+    for (const name of ["b", "c", "a"]) await createCustomer(ctx, owner, org, { name });
+
+    const order = async (query: string) =>
+      (await list(owner.accessToken, org.id, query)).body.data.customers.map((c: any) => c.name);
+    expect(await order("?sortBy=name&sortOrder=asc")).toEqual(["a", "b", "c"]);
+    expect(await order("?sortBy=name&sortOrder=desc")).toEqual(["c", "b", "a"]);
+  });
+
+  it.each([
+    ["page=0"],
+    ["page=abc"],
+    ["limit=0"],
+    ["limit=101"],
+    ["search="],
+    ["sortBy=passwordHash"],
+    ["sortBy=organizationId"],
+    ["sortOrder=up"],
+    ["createdFrom=yesterday"],
+    ["createdFrom=2026-09-30&createdTo=2026-09-01"],
+    ["organizationId=x"],
+    ["search=a&search=b"],
+  ])("rejects the query ?%s with VALIDATION_ERROR", async (query) => {
+    const { owner, org } = await setup();
+    expectError(await list(owner.accessToken, org.id, `?${query}`), 400, "VALIDATION_ERROR");
+  });
+
+  it("isolates organizations: B never sees A's customers, in any page, search or filter", async () => {
+    const { owner, org, otherOwner, otherOrg } = await setup();
+    await createCustomer(ctx, owner, org, { name: "Secret Acme", company: "Acme" });
+    await createCustomer(ctx, otherOwner, otherOrg, { name: "Visible" });
+
+    for (const query of ["", "?search=secret", "?company=acme", "?limit=100"]) {
+      const res = await list(otherOwner.accessToken, otherOrg.id, query);
+      expect(res.body.data.customers.map((c: any) => c.name).every((n: string) => n === "Visible")).toBe(true);
+      expect(JSON.stringify(res.body)).not.toContain("Secret");
+    }
+    expectError(await list(otherOwner.accessToken, org.id), 404, "ORGANIZATION_NOT_FOUND");
+  });
+
+  it("requires a token and a membership", async () => {
+    const { org, otherOwner } = await setup();
+    expectError(await api.get(path(org.id)), 401, "UNAUTHORIZED");
+    expectError(await list(otherOwner.accessToken, org.id), 404, "ORGANIZATION_NOT_FOUND");
+  });
+});
