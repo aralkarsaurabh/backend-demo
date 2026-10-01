@@ -22,6 +22,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+  memberships     OrganizationMembership[]
+  invitationsSent OrganizationInvitation[]
 }
 
 model RefreshToken {
@@ -47,4 +49,56 @@ model SeedMigration {
   appliedAt DateTime @default(now())
 
   @@map("_seed_migrations")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique // server-generated, never client-supplied
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships OrganizationMembership[]
+  invitations OrganizationInvitation[]
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  // The migration also adds a hand-written partial unique index: one OWNER per organization.
+}
+
+model OrganizationInvitation {
+  id             String           @id @default(uuid())
+  organizationId String
+  email          String // lowercased
+  role           OrganizationRole
+  tokenHash      String           @unique // SHA-256 of the token, never the token itself
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  invitedBy      String
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter      User         @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  // The migration also adds a hand-written partial unique index: one open invitation per (organizationId, email).
 }

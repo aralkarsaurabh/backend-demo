@@ -4,6 +4,9 @@ import { loadEnv } from "./config/env";
 import { BcryptPasswordService } from "./infrastructure/authentication/BcryptPasswordService";
 import { JwtTokenService } from "./infrastructure/authentication/JwtTokenService";
 import { createPrismaClient } from "./infrastructure/database/prisma";
+import { PrismaOrganizationInvitationRepository } from "./infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
+import { PrismaOrganizationMembershipRepository } from "./infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
+import { PrismaOrganizationRepository } from "./infrastructure/database/repositories/PrismaOrganizationRepository";
 import { PrismaRefreshTokenRepository } from "./infrastructure/database/repositories/PrismaRefreshTokenRepository";
 import { PrismaUserRepository } from "./infrastructure/database/repositories/PrismaUserRepository";
 import { consoleLogger } from "./shared/logger";
@@ -14,6 +17,9 @@ const prisma = createPrismaClient(env.DATABASE_URL);
 const container = buildContainer({
   users: new PrismaUserRepository(prisma),
   refreshTokens: new PrismaRefreshTokenRepository(prisma),
+  organizations: new PrismaOrganizationRepository(prisma),
+  organizationMemberships: new PrismaOrganizationMembershipRepository(prisma),
+  organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
   passwords: new BcryptPasswordService(),
   tokens: new JwtTokenService({
     access: env.JWT_ACCESS_SECRET,
