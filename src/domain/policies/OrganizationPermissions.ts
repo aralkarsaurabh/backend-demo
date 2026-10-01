@@ -16,6 +16,12 @@ export const OrganizationPermission = {
   LEAD_ASSIGN: "lead:assign",
   LEAD_CONVERT: "lead:convert",
   LEAD_DELETE: "lead:delete",
+  PIPELINE_READ: "pipeline:read",
+  PIPELINE_CREATE: "pipeline:create",
+  PIPELINE_UPDATE: "pipeline:update",
+  PIPELINE_DELETE: "pipeline:delete",
+  PIPELINE_MANAGE_STAGES: "pipeline:manage_stages",
+  PIPELINE_MOVE_LEAD: "pipeline:move_lead",
 } as const;
 
 export type OrganizationPermission =
@@ -37,6 +43,20 @@ const LEAD_MANAGE = [
   OrganizationPermission.LEAD_CONVERT,
 ] as const;
 
+/** What every member may do with pipelines: look at them and move leads through them. */
+const PIPELINE_USE = [
+  OrganizationPermission.PIPELINE_READ,
+  OrganizationPermission.PIPELINE_MOVE_LEAD,
+] as const;
+
+/** Defining pipelines and their stages is for OWNER and ADMIN only. */
+const PIPELINE_MANAGE = [
+  OrganizationPermission.PIPELINE_CREATE,
+  OrganizationPermission.PIPELINE_UPDATE,
+  OrganizationPermission.PIPELINE_DELETE,
+  OrganizationPermission.PIPELINE_MANAGE_STAGES,
+] as const;
+
 /** Roles map to permissions in code; there is no database-configurable RBAC. */
 export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPermission[]> = {
   OWNER: [
@@ -49,6 +69,8 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.CUSTOMER_DELETE,
     ...LEAD_MANAGE,
     OrganizationPermission.LEAD_DELETE,
+    ...PIPELINE_USE,
+    ...PIPELINE_MANAGE,
   ],
   ADMIN: [
     OrganizationPermission.ORGANIZATION_READ,
@@ -59,12 +81,15 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.CUSTOMER_DELETE,
     ...LEAD_MANAGE,
     OrganizationPermission.LEAD_DELETE,
+    ...PIPELINE_USE,
+    ...PIPELINE_MANAGE,
   ],
   MEMBER: [
     OrganizationPermission.ORGANIZATION_READ,
     OrganizationPermission.MEMBER_READ,
     ...CUSTOMER_MANAGE,
     ...LEAD_MANAGE,
+    ...PIPELINE_USE,
   ],
 };
 

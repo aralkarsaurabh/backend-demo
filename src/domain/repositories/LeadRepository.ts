@@ -82,4 +82,12 @@ export interface LeadRepository {
    * leaving no customer behind, when it was converted first.
    */
   convert(organizationId: string, leadId: string): Promise<ConvertedLead | null>;
+
+  /**
+   * Puts the lead in the stage and changes nothing else (D35). Null, changing nothing, when there
+   * is no such lead in this organization, the lead is already converted (D42), or the stage is not
+   * a stage of one of this organization's pipelines (D34). Throws PIPELINE_STAGE_NOT_FOUND when
+   * the stage is deleted while the move is running.
+   */
+  moveToStage(organizationId: string, leadId: string, stageId: string): Promise<Lead | null>;
 }

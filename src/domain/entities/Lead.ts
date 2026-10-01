@@ -38,6 +38,8 @@ export interface Lead {
   notes: string | null;
   convertedAt: Date | null;
   convertedCustomerId: string | null;
+  /** The lead's position in a sales pipeline; set only by moving it, never by an update (D35, D36). */
+  pipelineStageId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
