@@ -5,6 +5,9 @@ import { buildContainer } from "../../src/app/container";
 import { BcryptPasswordService } from "../../src/infrastructure/authentication/BcryptPasswordService";
 import { JwtTokenService } from "../../src/infrastructure/authentication/JwtTokenService";
 import { createPrismaClient } from "../../src/infrastructure/database/prisma";
+import { PrismaOrganizationInvitationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
+import { PrismaOrganizationMembershipRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
+import { PrismaOrganizationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationRepository";
 import { PrismaRefreshTokenRepository } from "../../src/infrastructure/database/repositories/PrismaRefreshTokenRepository";
 import { PrismaUserRepository } from "../../src/infrastructure/database/repositories/PrismaUserRepository";
 import { silentLogger } from "../../src/shared/logger";
@@ -19,6 +22,9 @@ export function buildIntegrationApp() {
   const container = buildContainer({
     users: new PrismaUserRepository(prisma),
     refreshTokens: new PrismaRefreshTokenRepository(prisma),
+    organizations: new PrismaOrganizationRepository(prisma),
+    organizationMemberships: new PrismaOrganizationMembershipRepository(prisma),
+    organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
     passwords: new BcryptPasswordService(4),
     tokens,
   });
@@ -29,6 +35,9 @@ export function buildIntegrationApp() {
 export type IntegrationApp = ReturnType<typeof buildIntegrationApp>;
 
 export async function resetDatabase(prisma: IntegrationApp["prisma"]) {
+  await prisma.organizationInvitation.deleteMany();
+  await prisma.organizationMembership.deleteMany();
+  await prisma.organization.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.user.deleteMany();
   await prisma.seedMigration.deleteMany();
@@ -57,4 +66,51 @@ export async function signUp(ctx: IntegrationApp, email = "asha@example.com") {
     accessToken: res.body.data.tokens.accessToken as string,
     refreshToken: res.body.data.tokens.refreshToken as string,
   };
+}
+
+type SignedUp = Awaited<ReturnType<typeof signUp>>;
+
+/** Creates an organization as `owner` and returns its id and slug. */
+export async function createOrganization(
+  ctx: IntegrationApp,
+  owner: SignedUp,
+  name = "Acme Technologies",
+) {
+  const res = await ctx.api
+    .post("/api/v1/organizations")
+    .set(bearer(owner.accessToken))
+    .send({ name });
+  return res.body.data.organization as { id: string; name: string; slug: string; role: string };
+}
+
+/** Invites `email` as `inviter` and returns the raw one-time token. */
+export async function invite(
+  ctx: IntegrationApp,
+  inviter: SignedUp,
+  organizationId: string,
+  email: string,
+  role: "ADMIN" | "MEMBER" = "MEMBER",
+) {
+  const res = await ctx.api
+    .post(`/api/v1/organizations/${organizationId}/invitations`)
+    .set(bearer(inviter.accessToken))
+    .send({ email, role });
+  return res.body.data.token as string;
+}
+
+/** Signs up `email`, invites them as `inviter`, and has them accept. */
+export async function joinOrganization(
+  ctx: IntegrationApp,
+  inviter: SignedUp,
+  organizationId: string,
+  email: string,
+  role: "ADMIN" | "MEMBER" = "MEMBER",
+) {
+  const member = await signUp(ctx, email);
+  const token = await invite(ctx, inviter, organizationId, email, role);
+  await ctx.api
+    .post("/api/v1/organization-invitations/accept")
+    .set(bearer(member.accessToken))
+    .send({ token });
+  return member;
 }
