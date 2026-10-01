@@ -21,12 +21,13 @@ Organization-scoped leads: create, read, update, assign, delete, a searchable, f
 
 A **lead** belongs to exactly one **organization**. There is no global lead list. Access comes only from the caller's **organization membership** (see [organizations.md](organizations.md)); the platform role `User.role` plays no part.
 
-Fields: `name` (required), `email`, `phone`, `company`, `source`, `notes` (optional), plus `status`, `assignedToUserId`, `convertedAt` and `convertedCustomerId`, which the system and later calls manage.
+Fields: `name` (required), `email`, `phone`, `company`, `source`, `notes` (optional), plus `status`, `assignedToUserId`, `convertedAt`, `convertedCustomerId` and `pipelineStageId`, which the system and later calls manage.
 
 - **Status:** `NEW` (default), `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `LOST` and `CONVERTED`. `PATCH` moves a lead freely among the first five. `CONVERTED` is only ever set by the convert endpoint.
 - **Source:** `WEBSITE`, `REFERRAL`, `SOCIAL_MEDIA`, `EMAIL_CAMPAIGN`, `COLD_OUTREACH`, `EVENT`, `OTHER`.
 - **Assignment:** a lead is assigned to a member of the same organization, or to nobody.
 - **Conversion:** creates a [customer](customers.md) in the same organization from the lead's name, email, phone, company and notes, and marks the lead `CONVERTED`, in one transaction. A converted lead is read-only; it can still be deleted by an `ADMIN` or `OWNER`, and its customer stays.
+- **Pipeline stage:** a lead can sit in one stage of a sales pipeline (see [pipelines.md](pipelines.md)). The stage is a position in a sales process and is separate from `status`; it is set only by `PATCH .../leads/:leadId/stage`, never by `PATCH /:leadId` or on creation, and a lead has none until it is first moved.
 
 ## 2. Decisions
 
@@ -54,7 +55,7 @@ Fields: `name` (required), `email`, `phone`, `company`, `source`, `notes` (optio
 
 ## 4. Data model
 
-`Lead`: `id` (uuid), `organizationId` (FK to `Organization`, `ON DELETE CASCADE`), `name`, `email?`, `phone?`, `company?`, `source?` (`LeadSource`), `status` (`LeadStatus`, default `NEW`), `assignedToUserId?` (FK to `User`, `ON DELETE SET NULL`), `notes?`, `convertedAt?`, `convertedCustomerId?` (unique FK to `Customer`, `ON DELETE SET NULL`), `createdAt`, `updatedAt`.
+`Lead`: `id` (uuid), `organizationId` (FK to `Organization`, `ON DELETE CASCADE`), `name`, `email?`, `phone?`, `company?`, `source?` (`LeadSource`), `status` (`LeadStatus`, default `NEW`), `assignedToUserId?` (FK to `User`, `ON DELETE SET NULL`), `notes?`, `convertedAt?`, `convertedCustomerId?` (unique FK to `Customer`, `ON DELETE SET NULL`), `pipelineStageId?` (FK to `PipelineStage`, `ON DELETE NO ACTION`, added by `20261001190500_add_pipelines`), `createdAt`, `updatedAt`.
 
 Indexes follow the real query patterns: `(organizationId, createdAt)`, `(organizationId, status)`, `(organizationId, assignedToUserId)`. Migration: `20261001170500_add_leads`.
 
@@ -70,7 +71,7 @@ An organization-scoped request runs: `authenticate` → `requireOrganizationMemb
 
 ## 6. API reference
 
-All routes are under `/api/v1/organizations/:organizationId/leads`, need `Authorization: Bearer <accessToken>`, and use the standard envelope. Lead object: `{ id, name, email, phone, company, source, status, assignedToUserId, notes, convertedAt, convertedCustomerId, createdAt, updatedAt }`, with `null` for unset optional fields.
+All routes are under `/api/v1/organizations/:organizationId/leads`, need `Authorization: Bearer <accessToken>`, and use the standard envelope. Lead object: `{ id, name, email, phone, company, source, status, assignedToUserId, notes, convertedAt, convertedCustomerId, pipelineStageId, createdAt, updatedAt }`, with `null` for unset optional fields.
 
 ### `POST /`
 
@@ -106,7 +107,7 @@ Unknown query keys and bad values are `400 VALIDATION_ERROR`. `200`, `Leads retr
 
 ```json
 {
-  "leads": [{ "id": "uuid", "name": "...", "email": null, "phone": null, "company": null, "source": "WEBSITE", "status": "NEW", "assignedToUserId": null, "convertedAt": null, "convertedCustomerId": null, "createdAt": "...", "updatedAt": "..." }],
+  "leads": [{ "id": "uuid", "name": "...", "email": null, "phone": null, "company": null, "source": "WEBSITE", "status": "NEW", "assignedToUserId": null, "convertedAt": null, "convertedCustomerId": null, "pipelineStageId": null, "createdAt": "...", "updatedAt": "..." }],
   "pagination": { "page": 1, "limit": 20, "totalItems": 87, "totalPages": 5, "hasNextPage": true, "hasPreviousPage": false }
 }
 ```
@@ -119,7 +120,7 @@ List items leave out `notes`. The order is the sort field, then `id`, so equal v
 
 ### `PATCH /:leadId`
 
-Body: any non-empty subset of `name`, `email`, `phone`, `company`, `source`, `status`, `assignedToUserId`, `notes`. `null` clears an optional field and unassigns with `assignedToUserId`; `name` cannot be cleared; `status` cannot be `CONVERTED`. `200`, `Lead updated successfully.`, `data: { lead }`. `400 ASSIGNED_USER_NOT_MEMBER`, `404 LEAD_NOT_FOUND`, `409 LEAD_ALREADY_CONVERTED`.
+Body: any non-empty subset of `name`, `email`, `phone`, `company`, `source`, `status`, `assignedToUserId`, `notes`. `null` clears an optional field and unassigns with `assignedToUserId`; `name` cannot be cleared; `status` cannot be `CONVERTED`; `pipelineStageId` is not accepted (use the stage endpoint). `200`, `Lead updated successfully.`, `data: { lead }`. `400 ASSIGNED_USER_NOT_MEMBER`, `404 LEAD_NOT_FOUND`, `409 LEAD_ALREADY_CONVERTED`.
 
 ### `DELETE /:leadId`
 
@@ -129,12 +130,16 @@ Body: any non-empty subset of `name`, `email`, `phone`, `company`, `source`, `st
 
 No body. `200`, `Lead converted successfully.`, `data: { lead, customer }`. The lead is `CONVERTED` with `convertedAt` and `convertedCustomerId` set. `404 LEAD_NOT_FOUND`, `409 LEAD_ALREADY_CONVERTED`.
 
+### `PATCH /:leadId/stage`
+
+Moves the lead into a pipeline stage without touching its `status`. Body: `{ "pipelineStageId": "<uuid>" }`. Needs `pipeline:move_lead`, which every member has. `200`, `Lead moved successfully.`, `data: { lead }`. `404 PIPELINE_STAGE_NOT_FOUND`, `404 LEAD_NOT_FOUND`, `409 LEAD_ALREADY_CONVERTED`. Details in [pipelines.md](pipelines.md).
+
 ## 7. Error codes
 
 | Code | HTTP | When |
 |---|---|---|
 | `LEAD_NOT_FOUND` | 404 | No such lead in this organization (also for another organization's lead) |
-| `LEAD_ALREADY_CONVERTED` | 409 | Convert or update on a converted lead |
+| `LEAD_ALREADY_CONVERTED` | 409 | Convert, update or move to a stage on a converted lead |
 | `ASSIGNED_USER_NOT_MEMBER` | 400 | The assignee is not a member of the organization, or does not exist |
 | `ORGANIZATION_NOT_FOUND` | 404 | Not a member, or no such organization |
 | `INSUFFICIENT_ORGANIZATION_PERMISSION` | 403 | A `MEMBER` deleting |
