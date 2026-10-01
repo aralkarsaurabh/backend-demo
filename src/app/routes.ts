@@ -3,6 +3,7 @@ import { UserRole } from "../domain/enums/UserRole";
 import { OrganizationPermission } from "../domain/policies/OrganizationPermissions";
 import { AuthController } from "../infrastructure/http/controllers/AuthController";
 import { CustomerController } from "../infrastructure/http/controllers/CustomerController";
+import { LeadController } from "../infrastructure/http/controllers/LeadController";
 import { HealthController } from "../infrastructure/http/controllers/HealthController";
 import { OrganizationController } from "../infrastructure/http/controllers/OrganizationController";
 import { UserController } from "../infrastructure/http/controllers/UserController";
@@ -20,6 +21,7 @@ export function createRoutes(container: Container, logger: Logger): Router {
   const users = new UserController(container, logger);
   const organizations = new OrganizationController(container, logger);
   const customers = new CustomerController(container, logger);
+  const leads = new LeadController(container, logger);
   const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
   const requireMembership = requireOrganizationMembership(container.organizationMemberships);
@@ -119,6 +121,54 @@ export function createRoutes(container: Container, logger: Logger): Router {
     requireMembership,
     requireOrganizationPermission(OrganizationPermission.CUSTOMER_DELETE),
     customers.remove,
+  );
+
+  // Leads belong to one organization, exactly like customers: the same membership lookup guards
+  // them and the organization id used by the use cases comes from that lookup, not the body.
+  // Assigning a lead (assignedToUserId in the PATCH body) additionally needs lead:assign, which
+  // the controller checks because it depends on the body.
+  const leadsPath = "/organizations/:organizationId/leads";
+  router.post(
+    leadsPath,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_CREATE),
+    leads.create,
+  );
+  router.get(
+    leadsPath,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_READ),
+    leads.list,
+  );
+  router.get(
+    `${leadsPath}/:leadId`,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_READ),
+    leads.get,
+  );
+  router.patch(
+    `${leadsPath}/:leadId`,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_UPDATE),
+    leads.update,
+  );
+  router.delete(
+    `${leadsPath}/:leadId`,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_DELETE),
+    leads.remove,
+  );
+  router.post(
+    `${leadsPath}/:leadId/convert`,
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.LEAD_CONVERT),
+    leads.convert,
   );
 
   return router;

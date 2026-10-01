@@ -17,12 +17,20 @@ import { ListCustomers } from "../application/use-cases/customer/ListCustomers";
 import { UpdateCustomer } from "../application/use-cases/customer/UpdateCustomer";
 import { DeleteCustomer } from "../application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../application/use-cases/customer/GetCustomer";
+import { AssignLead } from "../application/use-cases/lead/AssignLead";
+import { ConvertLead } from "../application/use-cases/lead/ConvertLead";
+import { CreateLead } from "../application/use-cases/lead/CreateLead";
+import { DeleteLead } from "../application/use-cases/lead/DeleteLead";
+import { GetLead } from "../application/use-cases/lead/GetLead";
+import { ListLeads } from "../application/use-cases/lead/ListLeads";
+import { UpdateLead } from "../application/use-cases/lead/UpdateLead";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
 import { UpdateUserStatus } from "../application/use-cases/user/UpdateUserStatus";
 import { GetCurrentUser } from "../application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../application/use-cases/user/ListUsers";
 import { CustomerRepository } from "../domain/repositories/CustomerRepository";
+import { LeadRepository } from "../domain/repositories/LeadRepository";
 import { OrganizationInvitationRepository } from "../domain/repositories/OrganizationInvitationRepository";
 import { OrganizationMembershipRepository } from "../domain/repositories/OrganizationMembershipRepository";
 import { OrganizationRepository } from "../domain/repositories/OrganizationRepository";
@@ -36,6 +44,7 @@ export interface Dependencies {
   organizationMemberships: OrganizationMembershipRepository;
   organizationInvitations: OrganizationInvitationRepository;
   customers: CustomerRepository;
+  leads: LeadRepository;
   passwords: PasswordService;
   tokens: TokenService;
 }
@@ -48,6 +57,7 @@ export function buildContainer({
   organizationMemberships,
   organizationInvitations,
   customers,
+  leads,
   passwords,
   tokens,
 }: Dependencies) {
@@ -88,6 +98,12 @@ export function buildContainer({
     listCustomers: new ListCustomers(customers),
     updateCustomer: new UpdateCustomer(customers),
     deleteCustomer: new DeleteCustomer(customers),
+    createLead: new CreateLead(leads),
+    getLead: new GetLead(leads),
+    listLeads: new ListLeads(leads),
+    updateLead: new UpdateLead(leads, new AssignLead(organizationMemberships)),
+    deleteLead: new DeleteLead(leads),
+    convertLead: new ConvertLead(leads),
   };
 }
 

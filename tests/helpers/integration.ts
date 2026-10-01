@@ -6,6 +6,7 @@ import { BcryptPasswordService } from "../../src/infrastructure/authentication/B
 import { JwtTokenService } from "../../src/infrastructure/authentication/JwtTokenService";
 import { createPrismaClient } from "../../src/infrastructure/database/prisma";
 import { PrismaCustomerRepository } from "../../src/infrastructure/database/repositories/PrismaCustomerRepository";
+import { PrismaLeadRepository } from "../../src/infrastructure/database/repositories/PrismaLeadRepository";
 import { PrismaOrganizationInvitationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
 import { PrismaOrganizationMembershipRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
 import { PrismaOrganizationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationRepository";
@@ -27,6 +28,7 @@ export function buildIntegrationApp() {
     organizationMemberships: new PrismaOrganizationMembershipRepository(prisma),
     organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
     customers: new PrismaCustomerRepository(prisma),
+    leads: new PrismaLeadRepository(prisma),
     passwords: new BcryptPasswordService(4),
     tokens,
   });
@@ -37,6 +39,7 @@ export function buildIntegrationApp() {
 export type IntegrationApp = ReturnType<typeof buildIntegrationApp>;
 
 export async function resetDatabase(prisma: IntegrationApp["prisma"]) {
+  await prisma.lead.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.organizationInvitation.deleteMany();
   await prisma.organizationMembership.deleteMany();
@@ -138,6 +141,34 @@ export async function createCustomer(
     phone: string | null;
     company: string | null;
     notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+/** Creates a lead through the API as `actor` and returns it. */
+export async function createLead(
+  ctx: IntegrationApp,
+  actor: SignedUp,
+  org: Org,
+  body: Record<string, unknown> = { name: "Rahul Sharma" },
+) {
+  const res = await ctx.api
+    .post(`/api/v1/organizations/${org.id}/leads`)
+    .set(bearer(actor.accessToken))
+    .send(body);
+  return res.body.data.lead as {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    company: string | null;
+    source: string | null;
+    status: string;
+    assignedToUserId: string | null;
+    notes: string | null;
+    convertedAt: string | null;
+    convertedCustomerId: string | null;
     createdAt: string;
     updatedAt: string;
   };

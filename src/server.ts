@@ -5,6 +5,7 @@ import { BcryptPasswordService } from "./infrastructure/authentication/BcryptPas
 import { JwtTokenService } from "./infrastructure/authentication/JwtTokenService";
 import { createPrismaClient } from "./infrastructure/database/prisma";
 import { PrismaCustomerRepository } from "./infrastructure/database/repositories/PrismaCustomerRepository";
+import { PrismaLeadRepository } from "./infrastructure/database/repositories/PrismaLeadRepository";
 import { PrismaOrganizationInvitationRepository } from "./infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
 import { PrismaOrganizationMembershipRepository } from "./infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
 import { PrismaOrganizationRepository } from "./infrastructure/database/repositories/PrismaOrganizationRepository";
@@ -22,6 +23,7 @@ const container = buildContainer({
   organizationMemberships: new PrismaOrganizationMembershipRepository(prisma),
   organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
   customers: new PrismaCustomerRepository(prisma),
+  leads: new PrismaLeadRepository(prisma),
   passwords: new BcryptPasswordService(),
   tokens: new JwtTokenService({
     access: env.JWT_ACCESS_SECRET,

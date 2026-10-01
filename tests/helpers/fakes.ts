@@ -30,6 +30,22 @@ import { ListCustomers } from "../../src/application/use-cases/customer/ListCust
 import { UpdateCustomer } from "../../src/application/use-cases/customer/UpdateCustomer";
 import { DeleteCustomer } from "../../src/application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
+import { AssignLead } from "../../src/application/use-cases/lead/AssignLead";
+import { ConvertLead } from "../../src/application/use-cases/lead/ConvertLead";
+import { CreateLead } from "../../src/application/use-cases/lead/CreateLead";
+import { DeleteLead } from "../../src/application/use-cases/lead/DeleteLead";
+import { GetLead } from "../../src/application/use-cases/lead/GetLead";
+import { ListLeads } from "../../src/application/use-cases/lead/ListLeads";
+import { UpdateLead } from "../../src/application/use-cases/lead/UpdateLead";
+import { Lead } from "../../src/domain/entities/Lead";
+import {
+  ConvertedLead,
+  CreateLeadData,
+  LeadListQuery,
+  LeadPage,
+  LeadRepository,
+  UpdateLeadData,
+} from "../../src/domain/repositories/LeadRepository";
 import { Organization } from "../../src/domain/entities/Organization";
 import { OrganizationInvitation } from "../../src/domain/entities/OrganizationInvitation";
 import {
@@ -199,6 +215,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
   const memberships = new InMemoryOrganizationMembershipRepository(orgData, users);
   const invitations = new InMemoryOrganizationInvitationRepository(orgData);
   const customers = new InMemoryCustomerRepository();
+  const leads = new InMemoryLeadRepository(customers);
 
   return {
     users,
@@ -210,6 +227,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     memberships,
     invitations,
     customers,
+    leads,
     register: new RegisterUser(users, passwords),
     login: new LoginUser(users, refreshTokens, passwords, tokens),
     refresh: new RefreshTokens(users, refreshTokens, tokens),
@@ -238,6 +256,13 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     listCustomers: new ListCustomers(customers),
     updateCustomer: new UpdateCustomer(customers),
     deleteCustomer: new DeleteCustomer(customers),
+    createLead: new CreateLead(leads),
+    getLead: new GetLead(leads),
+    listLeads: new ListLeads(leads),
+    assignLead: new AssignLead(memberships),
+    updateLead: new UpdateLead(leads, new AssignLead(memberships)),
+    deleteLead: new DeleteLead(leads),
+    convertLead: new ConvertLead(leads),
   };
 }
 
@@ -482,5 +507,116 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       items: matching.slice(start, start + query.limit).map((c) => ({ ...c })),
       totalItems: matching.length,
     };
+  }
+}
+
+/**
+ * Like the Prisma repository, every method is scoped to one organization, and update and convert
+ * refuse a converted lead. Convert writes the lead only after the guard passes, so there is
+ * nothing to roll back here; the real rollback is proved against SQL in lead-repositories.test.ts.
+ */
+export class InMemoryLeadRepository implements LeadRepository {
+  readonly leads: Lead[] = [];
+
+  constructor(private readonly customers: InMemoryCustomerRepository) {}
+
+  async create(organizationId: string, data: CreateLeadData) {
+    const now = new Date();
+    const lead: Lead = {
+      id: randomUUID(),
+      organizationId,
+      name: data.name,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      company: data.company ?? null,
+      source: data.source ?? null,
+      status: "NEW",
+      assignedToUserId: null,
+      notes: data.notes ?? null,
+      convertedAt: null,
+      convertedCustomerId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.leads.push(lead);
+    return { ...lead };
+  }
+
+  async findById(organizationId: string, leadId: string) {
+    const row = this.leads.find((l) => l.id === leadId && l.organizationId === organizationId);
+    return row ? { ...row } : null;
+  }
+
+  async update(organizationId: string, leadId: string, data: UpdateLeadData) {
+    const row = this.leads.find((l) => l.id === leadId && l.organizationId === organizationId);
+    if (!row || row.status === "CONVERTED") return null;
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) (row as unknown as Record<string, unknown>)[key] = value;
+    }
+    row.updatedAt = new Date();
+    return { ...row };
+  }
+
+  async delete(organizationId: string, leadId: string) {
+    const index = this.leads.findIndex((l) => l.id === leadId && l.organizationId === organizationId);
+    if (index < 0) return false;
+    this.leads.splice(index, 1);
+    return true;
+  }
+
+  /** Mirrors the SQL: filters, a total order ending in id, then the page. */
+  async list(organizationId: string, query: LeadListQuery): Promise<LeadPage> {
+    const needle = query.search?.toLowerCase();
+    const has = (value: string | null) => value?.toLowerCase().includes(needle!) ?? false;
+    const matching = this.leads.filter(
+      (l) =>
+        l.organizationId === organizationId &&
+        (!query.status || l.status === query.status) &&
+        (!query.source || l.source === query.source) &&
+        (!query.assignedToUserId || l.assignedToUserId === query.assignedToUserId) &&
+        (!query.createdFrom || l.createdAt >= query.createdFrom) &&
+        (!query.createdTo || l.createdAt <= query.createdTo) &&
+        (!needle || has(l.name) || has(l.email) || has(l.phone) || has(l.company)),
+    );
+
+    const dir = query.sortOrder === "asc" ? 1 : -1;
+    const key = (l: Lead) => {
+      const value = l[query.sortBy];
+      return value instanceof Date ? value.getTime() : value;
+    };
+    matching.sort((a, b) => {
+      const [x, y] = [key(a), key(b)];
+      if (x !== y) {
+        if (x === null) return 1; // empty values last, like nulls: "last"
+        if (y === null) return -1;
+        return (x < y ? -1 : 1) * dir;
+      }
+      return (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) * dir;
+    });
+
+    const start = (query.page - 1) * query.limit;
+    return {
+      items: matching.slice(start, start + query.limit).map((l) => ({ ...l })),
+      totalItems: matching.length,
+    };
+  }
+
+  async convert(organizationId: string, leadId: string): Promise<ConvertedLead | null> {
+    const row = this.leads.find((l) => l.id === leadId && l.organizationId === organizationId);
+    if (!row) return null;
+    if (row.status === "CONVERTED") throw new AppError(ErrorCode.LEAD_ALREADY_CONVERTED);
+
+    const customer = await this.customers.create(organizationId, {
+      name: row.name,
+      email: row.email ?? undefined,
+      phone: row.phone ?? undefined,
+      company: row.company ?? undefined,
+      notes: row.notes ?? undefined,
+    });
+    row.status = "CONVERTED";
+    row.convertedAt = new Date();
+    row.convertedCustomerId = customer.id;
+    row.updatedAt = new Date();
+    return { lead: { ...row }, customer };
   }
 }
