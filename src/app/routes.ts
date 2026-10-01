@@ -6,6 +6,7 @@ import { CustomerController } from "../infrastructure/http/controllers/CustomerC
 import { LeadController } from "../infrastructure/http/controllers/LeadController";
 import { HealthController } from "../infrastructure/http/controllers/HealthController";
 import { OrganizationController } from "../infrastructure/http/controllers/OrganizationController";
+import { PipelineController } from "../infrastructure/http/controllers/PipelineController";
 import { UserController } from "../infrastructure/http/controllers/UserController";
 import { Logger } from "../shared/logger";
 import { Container } from "./container";
@@ -22,6 +23,7 @@ export function createRoutes(container: Container, logger: Logger): Router {
   const organizations = new OrganizationController(container, logger);
   const customers = new CustomerController(container, logger);
   const leads = new LeadController(container, logger);
+  const pipelines = new PipelineController(container, logger);
   const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
   const requireMembership = requireOrganizationMembership(container.organizationMemberships);
@@ -170,6 +172,39 @@ export function createRoutes(container: Container, logger: Logger): Router {
     requireOrganizationPermission(OrganizationPermission.LEAD_CONVERT),
     leads.convert,
   );
+
+  // Pipelines belong to one organization, like leads. Defining them is for OWNER and ADMIN; every
+  // member can read them and move leads through them. `stages/reorder` is registered before
+  // `stages/:stageId` so "reorder" is never read as a stage id.
+  const pipelinesPath = "/organizations/:organizationId/pipelines";
+  const pipelinePath = `${pipelinesPath}/:pipelineId`;
+  const guard = (permission: OrganizationPermission) =>
+    [requireAuth, requireMembership, requireOrganizationPermission(permission)] as const;
+
+  router.post(pipelinesPath, ...guard(OrganizationPermission.PIPELINE_CREATE), pipelines.create);
+  router.get(pipelinesPath, ...guard(OrganizationPermission.PIPELINE_READ), pipelines.list);
+  router.get(pipelinePath, ...guard(OrganizationPermission.PIPELINE_READ), pipelines.get);
+  router.patch(pipelinePath, ...guard(OrganizationPermission.PIPELINE_UPDATE), pipelines.update);
+  router.delete(pipelinePath, ...guard(OrganizationPermission.PIPELINE_DELETE), pipelines.remove);
+  router.get(`${pipelinePath}/summary`, ...guard(OrganizationPermission.PIPELINE_READ), pipelines.summary);
+  router.post(`${pipelinePath}/stages`, ...guard(OrganizationPermission.PIPELINE_MANAGE_STAGES), pipelines.createStage);
+  router.patch(
+    `${pipelinePath}/stages/reorder`,
+    ...guard(OrganizationPermission.PIPELINE_MANAGE_STAGES),
+    pipelines.reorderStages,
+  );
+  router.patch(
+    `${pipelinePath}/stages/:stageId`,
+    ...guard(OrganizationPermission.PIPELINE_MANAGE_STAGES),
+    pipelines.updateStage,
+  );
+  router.delete(
+    `${pipelinePath}/stages/:stageId`,
+    ...guard(OrganizationPermission.PIPELINE_MANAGE_STAGES),
+    pipelines.removeStage,
+  );
+  // Moving is its own operation, not a lead update: it needs pipeline:move_lead and nothing else.
+  router.patch(`${leadsPath}/:leadId/stage`, ...guard(OrganizationPermission.PIPELINE_MOVE_LEAD), pipelines.moveLead);
 
   return router;
 }

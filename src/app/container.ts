@@ -24,6 +24,17 @@ import { DeleteLead } from "../application/use-cases/lead/DeleteLead";
 import { GetLead } from "../application/use-cases/lead/GetLead";
 import { ListLeads } from "../application/use-cases/lead/ListLeads";
 import { UpdateLead } from "../application/use-cases/lead/UpdateLead";
+import { CreatePipeline } from "../application/use-cases/pipeline/CreatePipeline";
+import { ListPipelines } from "../application/use-cases/pipeline/ListPipelines";
+import { GetPipeline } from "../application/use-cases/pipeline/GetPipeline";
+import { UpdatePipeline } from "../application/use-cases/pipeline/UpdatePipeline";
+import { DeletePipeline } from "../application/use-cases/pipeline/DeletePipeline";
+import { CreatePipelineStage } from "../application/use-cases/pipeline/CreatePipelineStage";
+import { UpdatePipelineStage } from "../application/use-cases/pipeline/UpdatePipelineStage";
+import { DeletePipelineStage } from "../application/use-cases/pipeline/DeletePipelineStage";
+import { ReorderPipelineStages } from "../application/use-cases/pipeline/ReorderPipelineStages";
+import { MoveLeadToStage } from "../application/use-cases/pipeline/MoveLeadToStage";
+import { GetPipelineSummary } from "../application/use-cases/pipeline/GetPipelineSummary";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
 import { UpdateUserStatus } from "../application/use-cases/user/UpdateUserStatus";
@@ -34,6 +45,8 @@ import { LeadRepository } from "../domain/repositories/LeadRepository";
 import { OrganizationInvitationRepository } from "../domain/repositories/OrganizationInvitationRepository";
 import { OrganizationMembershipRepository } from "../domain/repositories/OrganizationMembershipRepository";
 import { OrganizationRepository } from "../domain/repositories/OrganizationRepository";
+import { PipelineRepository } from "../domain/repositories/PipelineRepository";
+import { PipelineStageRepository } from "../domain/repositories/PipelineStageRepository";
 import { RefreshTokenRepository } from "../domain/repositories/RefreshTokenRepository";
 import { UserRepository } from "../domain/repositories/UserRepository";
 
@@ -45,6 +58,8 @@ export interface Dependencies {
   organizationInvitations: OrganizationInvitationRepository;
   customers: CustomerRepository;
   leads: LeadRepository;
+  pipelines: PipelineRepository;
+  pipelineStages: PipelineStageRepository;
   passwords: PasswordService;
   tokens: TokenService;
 }
@@ -58,6 +73,8 @@ export function buildContainer({
   organizationInvitations,
   customers,
   leads,
+  pipelines,
+  pipelineStages,
   passwords,
   tokens,
 }: Dependencies) {
@@ -104,6 +121,17 @@ export function buildContainer({
     updateLead: new UpdateLead(leads, new AssignLead(organizationMemberships)),
     deleteLead: new DeleteLead(leads),
     convertLead: new ConvertLead(leads),
+    createPipeline: new CreatePipeline(pipelines),
+    listPipelines: new ListPipelines(pipelines),
+    getPipeline: new GetPipeline(pipelines),
+    updatePipeline: new UpdatePipeline(pipelines),
+    deletePipeline: new DeletePipeline(pipelines),
+    createPipelineStage: new CreatePipelineStage(pipelineStages),
+    updatePipelineStage: new UpdatePipelineStage(pipelines, pipelineStages),
+    deletePipelineStage: new DeletePipelineStage(pipelines, pipelineStages),
+    reorderPipelineStages: new ReorderPipelineStages(pipelines, pipelineStages),
+    moveLeadToStage: new MoveLeadToStage(leads, pipelineStages),
+    getPipelineSummary: new GetPipelineSummary(pipelines),
   };
 }
 
