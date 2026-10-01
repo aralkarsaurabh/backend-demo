@@ -35,6 +35,12 @@ import { DeletePipelineStage } from "../application/use-cases/pipeline/DeletePip
 import { ReorderPipelineStages } from "../application/use-cases/pipeline/ReorderPipelineStages";
 import { MoveLeadToStage } from "../application/use-cases/pipeline/MoveLeadToStage";
 import { GetPipelineSummary } from "../application/use-cases/pipeline/GetPipelineSummary";
+import { AssignTask } from "../application/use-cases/task/AssignTask";
+import { CreateTask } from "../application/use-cases/task/CreateTask";
+import { DeleteTask } from "../application/use-cases/task/DeleteTask";
+import { GetTask } from "../application/use-cases/task/GetTask";
+import { ListTasks } from "../application/use-cases/task/ListTasks";
+import { UpdateTask } from "../application/use-cases/task/UpdateTask";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
 import { UpdateUserStatus } from "../application/use-cases/user/UpdateUserStatus";
@@ -48,6 +54,7 @@ import { OrganizationRepository } from "../domain/repositories/OrganizationRepos
 import { PipelineRepository } from "../domain/repositories/PipelineRepository";
 import { PipelineStageRepository } from "../domain/repositories/PipelineStageRepository";
 import { RefreshTokenRepository } from "../domain/repositories/RefreshTokenRepository";
+import { TaskRepository } from "../domain/repositories/TaskRepository";
 import { UserRepository } from "../domain/repositories/UserRepository";
 
 export interface Dependencies {
@@ -60,6 +67,7 @@ export interface Dependencies {
   leads: LeadRepository;
   pipelines: PipelineRepository;
   pipelineStages: PipelineStageRepository;
+  tasks: TaskRepository;
   passwords: PasswordService;
   tokens: TokenService;
 }
@@ -75,9 +83,12 @@ export function buildContainer({
   leads,
   pipelines,
   pipelineStages,
+  tasks,
   passwords,
   tokens,
 }: Dependencies) {
+  const assignTask = new AssignTask(organizationMemberships);
+
   return {
     tokens,
     // The organization middleware looks the caller's membership up on every request.
@@ -132,6 +143,11 @@ export function buildContainer({
     reorderPipelineStages: new ReorderPipelineStages(pipelines, pipelineStages),
     moveLeadToStage: new MoveLeadToStage(leads, pipelineStages),
     getPipelineSummary: new GetPipelineSummary(pipelines),
+    createTask: new CreateTask(tasks, assignTask),
+    getTask: new GetTask(tasks),
+    listTasks: new ListTasks(tasks),
+    updateTask: new UpdateTask(tasks, assignTask),
+    deleteTask: new DeleteTask(tasks),
   };
 }
 

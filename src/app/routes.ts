@@ -7,6 +7,7 @@ import { LeadController } from "../infrastructure/http/controllers/LeadControlle
 import { HealthController } from "../infrastructure/http/controllers/HealthController";
 import { OrganizationController } from "../infrastructure/http/controllers/OrganizationController";
 import { PipelineController } from "../infrastructure/http/controllers/PipelineController";
+import { TaskController } from "../infrastructure/http/controllers/TaskController";
 import { UserController } from "../infrastructure/http/controllers/UserController";
 import { Logger } from "../shared/logger";
 import { Container } from "./container";
@@ -24,6 +25,7 @@ export function createRoutes(container: Container, logger: Logger): Router {
   const customers = new CustomerController(container, logger);
   const leads = new LeadController(container, logger);
   const pipelines = new PipelineController(container, logger);
+  const tasks = new TaskController(container, logger);
   const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
   const requireMembership = requireOrganizationMembership(container.organizationMemberships);
@@ -205,6 +207,16 @@ export function createRoutes(container: Container, logger: Logger): Router {
   );
   // Moving is its own operation, not a lead update: it needs pipeline:move_lead and nothing else.
   router.patch(`${leadsPath}/:leadId/stage`, ...guard(OrganizationPermission.PIPELINE_MOVE_LEAD), pipelines.moveLead);
+
+  // Tasks belong to one organization, like leads. Assigning (assignedToUserId in a body, null
+  // included) additionally needs task:assign, which the controller checks because it depends
+  // on the body.
+  const tasksPath = "/organizations/:organizationId/tasks";
+  router.post(tasksPath, ...guard(OrganizationPermission.TASK_CREATE), tasks.create);
+  router.get(tasksPath, ...guard(OrganizationPermission.TASK_READ), tasks.list);
+  router.get(`${tasksPath}/:taskId`, ...guard(OrganizationPermission.TASK_READ), tasks.get);
+  router.patch(`${tasksPath}/:taskId`, ...guard(OrganizationPermission.TASK_UPDATE), tasks.update);
+  router.delete(`${tasksPath}/:taskId`, ...guard(OrganizationPermission.TASK_DELETE), tasks.remove);
 
   return router;
 }
