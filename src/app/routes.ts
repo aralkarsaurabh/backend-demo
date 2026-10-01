@@ -16,7 +16,7 @@ import { authorize } from "./middleware/role.middleware";
 
 export function createRoutes(container: Container, logger: Logger): Router {
   const auth = new AuthController(container, logger);
-  const users = new UserController(container.getCurrentUser, container.listUsers);
+  const users = new UserController(container, logger);
   const organizations = new OrganizationController(container, logger);
   const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
@@ -32,6 +32,9 @@ export function createRoutes(container: Container, logger: Logger): Router {
   router.post("/auth/logout", auth.logout);
 
   router.get("/users/me", requireAuth, users.me);
+  router.patch("/users/me", requireAuth, users.updateMe);
+  router.post("/users/me/password", requireAuth, users.changePassword);
+  router.patch("/users/:userId/status", requireAuth, authorize(UserRole.ADMIN), users.updateStatus);
   router.get("/admin/users", requireAuth, authorize(UserRole.ADMIN), users.list);
 
   // Organizations. Platform roles play no part here: access comes from the caller's

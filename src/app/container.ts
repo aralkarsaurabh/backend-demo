@@ -12,6 +12,9 @@ import { ListOrganizationMembers } from "../application/use-cases/organization/L
 import { ListUserOrganizations } from "../application/use-cases/organization/ListUserOrganizations";
 import { RemoveOrganizationMember } from "../application/use-cases/organization/RemoveOrganizationMember";
 import { UpdateOrganizationMemberRole } from "../application/use-cases/organization/UpdateOrganizationMemberRole";
+import { ChangePassword } from "../application/use-cases/user/ChangePassword";
+import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
+import { UpdateUserStatus } from "../application/use-cases/user/UpdateUserStatus";
 import { GetCurrentUser } from "../application/use-cases/user/GetCurrentUser";
 import { ListUsers } from "../application/use-cases/user/ListUsers";
 import { OrganizationInvitationRepository } from "../domain/repositories/OrganizationInvitationRepository";
@@ -50,6 +53,9 @@ export function buildContainer({
     logoutUser: new LogoutUser(refreshTokens, tokens),
     getCurrentUser: new GetCurrentUser(users),
     listUsers: new ListUsers(users),
+    updateCurrentUser: new UpdateCurrentUser(users),
+    changePassword: new ChangePassword(users, refreshTokens, passwords),
+    updateUserStatus: new UpdateUserStatus(users, refreshTokens),
     createOrganization: new CreateOrganization(organizations),
     listUserOrganizations: new ListUserOrganizations(organizations),
     getOrganization: new GetOrganization(organizations),
