@@ -11,6 +11,7 @@ import { AppError } from "../../../shared/errors/AppError";
 import { ErrorCode } from "../../../shared/errors/error-codes";
 import type { Prisma } from "../../../../generated/prisma/client";
 import type { PrismaClient } from "../prisma";
+import { isForeignKeyViolation } from "./pipelineSql";
 
 export class PrismaLeadRepository implements LeadRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -82,6 +83,34 @@ export class PrismaLeadRepository implements LeadRepository {
       const converted = await tx.lead.findFirstOrThrow({ where: { id: leadId, organizationId } });
       return { lead: converted, customer };
     });
+  }
+
+  /**
+   * The stage is looked up through its pipeline's organization, and the write keeps the
+   * `status <> CONVERTED` guard of update() (D42), so a lead can neither be pointed at another
+   * organization's stage nor moved after a concurrent conversion. A stage deleted between the
+   * check and the write is stopped by the foreign key.
+   */
+  async moveToStage(organizationId: string, leadId: string, stageId: string): Promise<Lead | null> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const stage = await tx.pipelineStage.findFirst({
+          where: { id: stageId, pipeline: { organizationId } },
+          select: { id: true },
+        });
+        if (!stage) return null;
+
+        const { count } = await tx.lead.updateMany({
+          where: { id: leadId, organizationId, status: { not: "CONVERTED" } },
+          data: { pipelineStageId: stage.id },
+        });
+        if (count === 0) return null;
+        return tx.lead.findFirst({ where: { id: leadId, organizationId } });
+      });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) throw new AppError(ErrorCode.PIPELINE_STAGE_NOT_FOUND);
+      throw error;
+    }
   }
 }
 
