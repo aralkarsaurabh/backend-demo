@@ -208,3 +208,36 @@ describe("PrismaCustomerRepository.list: sorting and pagination", () => {
     expect((await customers.list(org.id, query({ page: 5, limit: 3 }))).items).toEqual([]);
   });
 });
+
+describe("PrismaCustomerRepository.update", () => {
+  it("changes the given fields only, clears on null and bumps updatedAt", async () => {
+    const org = await newOrg();
+    const created = await customers.create(org.id, { name: "Acme", email: "a@acme.io", notes: "VIP" });
+
+    const updated = await customers.update(org.id, created.id, { name: "Acme Ltd", notes: null });
+
+    expect(updated).toMatchObject({
+      id: created.id,
+      organizationId: org.id,
+      name: "Acme Ltd",
+      email: "a@acme.io",
+      notes: null,
+    });
+    expect(updated!.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+    expect(updated!.createdAt).toEqual(created.createdAt);
+  });
+
+  it("returns null and changes nothing for another organization's customer", async () => {
+    const a = await newOrg("a");
+    const b = await newOrg("b");
+    const created = await customers.create(a.id, { name: "Acme" });
+
+    expect(await customers.update(b.id, created.id, { name: "Hijacked" })).toBeNull();
+    expect((await prisma.customer.findUniqueOrThrow({ where: { id: created.id } })).name).toBe("Acme");
+  });
+
+  it("returns null for an unknown id", async () => {
+    const org = await newOrg();
+    expect(await customers.update(org.id, randomUUID(), { name: "X" })).toBeNull();
+  });
+});

@@ -3,9 +3,11 @@ import {
   createCustomerRequestSchema,
   customerListQuerySchema,
   customerParamsSchema,
+  updateCustomerRequestSchema,
 } from "../../../application/dto/customer/CustomerRequests";
 import { CreateCustomer } from "../../../application/use-cases/customer/CreateCustomer";
 import { GetCustomer } from "../../../application/use-cases/customer/GetCustomer";
+import { UpdateCustomer } from "../../../application/use-cases/customer/UpdateCustomer";
 import { ListCustomers } from "../../../application/use-cases/customer/ListCustomers";
 import { AppError } from "../../../shared/errors/AppError";
 import { ErrorCode } from "../../../shared/errors/error-codes";
@@ -17,6 +19,7 @@ export interface CustomerUseCases {
   createCustomer: CreateCustomer;
   getCustomer: GetCustomer;
   listCustomers: ListCustomers;
+  updateCustomer: UpdateCustomer;
 }
 
 const currentUser = (req: Request) => {
@@ -56,6 +59,25 @@ export class CustomerController {
     const query = parseOrThrow(customerListQuerySchema, req.query);
     const result = await this.useCases.listCustomers.execute(organizationId, query);
     res.status(200).json(ApiResponse.success("Customers retrieved successfully.", result));
+  };
+
+  update = async (req: Request, res: Response) => {
+    const user = currentUser(req);
+    const { organizationId } = currentMembership(req);
+    const { customerId } = parseOrThrow(customerParamsSchema, req.params);
+    const body = parseOrThrow(updateCustomerRequestSchema, req.body ?? {});
+    const result = await this.useCases.updateCustomer.execute(organizationId, customerId, body);
+
+    this.logger.info("customer_updated", {
+      userId: user.id,
+      organizationId,
+      customerId,
+      // field names only, never the values
+      changedFields: Object.keys(body)
+        .filter((key) => body[key as keyof typeof body] !== undefined)
+        .join(","),
+    });
+    res.status(200).json(ApiResponse.success("Customer updated successfully.", result));
   };
 
   get = async (req: Request, res: Response) => {

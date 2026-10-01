@@ -4,6 +4,7 @@ import {
   CustomerListQuery,
   CustomerPage,
   CustomerRepository,
+  UpdateCustomerData,
 } from "../../../domain/repositories/CustomerRepository";
 import type { Prisma } from "../../../../generated/prisma/client";
 import type { PrismaClient } from "../prisma";
@@ -17,6 +18,23 @@ export class PrismaCustomerRepository implements CustomerRepository {
 
   findById(organizationId: string, customerId: string): Promise<Customer | null> {
     return this.prisma.customer.findFirst({ where: { id: customerId, organizationId } });
+  }
+
+  async update(
+    organizationId: string,
+    customerId: string,
+    data: UpdateCustomerData,
+  ): Promise<Customer | null> {
+    try {
+      return await this.prisma.customer.update({
+        where: { id: customerId, organizationId },
+        data,
+      });
+    } catch (error) {
+      // P2025: no row matched the id and organization.
+      if ((error as { code?: string }).code === "P2025") return null;
+      throw error;
+    }
   }
 
   async list(organizationId: string, query: CustomerListQuery): Promise<CustomerPage> {

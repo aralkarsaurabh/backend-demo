@@ -132,3 +132,50 @@ describe("ListCustomers", () => {
     expect(res.customers).toHaveLength(2);
   });
 });
+
+describe("UpdateCustomer", () => {
+  it("changes only the fields it is given and leaves the rest alone", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, {
+      name: "Acme",
+      email: "a@acme.io",
+      company: "Acme",
+      notes: "VIP",
+    });
+
+    const { customer: updated } = await app.updateCustomer.execute(orgA, customer.id, {
+      name: "Acme Pvt Ltd",
+    });
+    expect(updated).toMatchObject({
+      id: customer.id,
+      name: "Acme Pvt Ltd",
+      email: "a@acme.io",
+      company: "Acme",
+      notes: "VIP",
+    });
+  });
+
+  it("clears an optional field when it is null", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, { name: "Acme", notes: "VIP" });
+    const { customer: updated } = await app.updateCustomer.execute(orgA, customer.id, { notes: null });
+    expect(updated.notes).toBeNull();
+  });
+
+  it("is CUSTOMER_NOT_FOUND for an unknown id", async () => {
+    const app = buildApp();
+    await expect(app.updateCustomer.execute(orgA, randomUUID(), { name: "X" })).rejects.toMatchObject({
+      code: "CUSTOMER_NOT_FOUND",
+    });
+  });
+
+  it("is CUSTOMER_NOT_FOUND for another organization's customer, and changes nothing", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, { name: "Acme" });
+
+    await expect(app.updateCustomer.execute(orgB, customer.id, { name: "Hijacked" })).rejects.toMatchObject({
+      code: "CUSTOMER_NOT_FOUND",
+    });
+    expect((await app.getCustomer.execute(orgA, customer.id)).customer.name).toBe("Acme");
+  });
+});

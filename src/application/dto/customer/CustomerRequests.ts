@@ -38,6 +38,22 @@ export const createCustomerRequestSchema = z.strictObject({
   notes: text("Notes", CUSTOMER_NOTES_MAX_LENGTH).optional(),
 });
 
+/**
+ * Every field is optional but at least one must be present, and `null` clears an optional
+ * one. The name cannot be cleared. Strict, like create.
+ */
+export const updateCustomerRequestSchema = z
+  .strictObject({
+    name: nameField.optional(),
+    email: emailField.nullable().optional(),
+    phone: text("Phone", CUSTOMER_PHONE_MAX_LENGTH).nullable().optional(),
+    company: text("Company", CUSTOMER_COMPANY_MAX_LENGTH).nullable().optional(),
+    notes: text("Notes", CUSTOMER_NOTES_MAX_LENGTH).nullable().optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: "Send at least one field to update.",
+  });
+
 export const customerParamsSchema = organizationParamsSchema.extend({
   customerId: z.uuid({ error: "Customer id must be a valid id." }),
 });
@@ -84,4 +100,5 @@ export const customerListQuerySchema = z
   );
 
 export type CreateCustomerRequest = z.output<typeof createCustomerRequestSchema>;
+export type UpdateCustomerRequest = z.output<typeof updateCustomerRequestSchema>;
 export type ListCustomersRequest = z.output<typeof customerListQuerySchema>;

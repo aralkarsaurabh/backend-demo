@@ -8,6 +8,15 @@ export interface CreateCustomerData {
   notes?: string;
 }
 
+/** A field left out is unchanged; `null` clears an optional field. */
+export interface UpdateCustomerData {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  notes?: string | null;
+}
+
 /** The only fields a list may be sorted by. Anything else is rejected before the database. */
 export const CUSTOMER_SORT_FIELDS = ["createdAt", "name", "company"] as const;
 export type CustomerSortField = (typeof CUSTOMER_SORT_FIELDS)[number];
@@ -43,6 +52,13 @@ export interface CustomerRepository {
 
   /** Null when there is no such customer in this organization. */
   findById(organizationId: string, customerId: string): Promise<Customer | null>;
+
+  /** Null when there is no such customer in this organization; nothing is changed then. */
+  update(
+    organizationId: string,
+    customerId: string,
+    data: UpdateCustomerData,
+  ): Promise<Customer | null>;
 
   /**
    * One page of the organization's customers. The order is always deterministic: the

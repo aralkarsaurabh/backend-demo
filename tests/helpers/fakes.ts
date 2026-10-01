@@ -23,9 +23,11 @@ import {
   CustomerListQuery,
   CustomerPage,
   CustomerRepository,
+  UpdateCustomerData,
 } from "../../src/domain/repositories/CustomerRepository";
 import { CreateCustomer } from "../../src/application/use-cases/customer/CreateCustomer";
 import { ListCustomers } from "../../src/application/use-cases/customer/ListCustomers";
+import { UpdateCustomer } from "../../src/application/use-cases/customer/UpdateCustomer";
 import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
 import { Organization } from "../../src/domain/entities/Organization";
 import { OrganizationInvitation } from "../../src/domain/entities/OrganizationInvitation";
@@ -233,6 +235,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     createCustomer: new CreateCustomer(customers),
     getCustomer: new GetCustomer(customers),
     listCustomers: new ListCustomers(customers),
+    updateCustomer: new UpdateCustomer(customers),
   };
 }
 
@@ -425,6 +428,16 @@ export class InMemoryCustomerRepository implements CustomerRepository {
   async findById(organizationId: string, customerId: string) {
     const row = this.customers.find((c) => c.id === customerId && c.organizationId === organizationId);
     return row ? { ...row } : null;
+  }
+
+  async update(organizationId: string, customerId: string, data: UpdateCustomerData) {
+    const row = this.customers.find((c) => c.id === customerId && c.organizationId === organizationId);
+    if (!row) return null;
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) (row as unknown as Record<string, unknown>)[key] = value;
+    }
+    row.updatedAt = new Date();
+    return { ...row };
   }
 
   /** Mirrors the SQL: filters, a total order ending in id, then the page. */

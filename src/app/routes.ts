@@ -105,5 +105,13 @@ export function createRoutes(container: Container, logger: Logger): Router {
     customers.get,
   );
 
+  router.patch(
+    "/organizations/:organizationId/customers/:customerId",
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.CUSTOMER_UPDATE),
+    customers.update,
+  );
+
   return router;
 }

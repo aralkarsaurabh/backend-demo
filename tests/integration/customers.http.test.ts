@@ -346,3 +346,112 @@ describe("GET /organizations/:organizationId/customers", () => {
     expectError(await list(otherOwner.accessToken, org.id), 404, "ORGANIZATION_NOT_FOUND");
   });
 });
+
+describe("PATCH /organizations/:organizationId/customers/:customerId", () => {
+  const patch = (token: string, orgId: string, customerId: string) =>
+    api.patch(path(orgId, customerId)).set(bearer(token));
+
+  it("updates some fields and returns the whole customer", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org, {
+      name: "Acme",
+      email: "a@acme.io",
+      notes: "VIP",
+    });
+
+    const res = await patch(owner.accessToken, org.id, created.id).send({
+      name: "Acme Technologies Pvt Ltd",
+      phone: "+911234567890",
+    });
+
+    expect(res.status).toBe(200);
+    expectEnvelope(res.body, true);
+    expect(res.body.message).toBe("Customer updated successfully.");
+    expect(res.body.data.customer).toEqual({
+      ...created,
+      name: "Acme Technologies Pvt Ltd",
+      phone: "+911234567890",
+      updatedAt: expect.any(String),
+    });
+    const row = await prisma.customer.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row).toMatchObject({ name: "Acme Technologies Pvt Ltd", email: "a@acme.io", notes: "VIP" });
+  });
+
+  it("allows OWNER, ADMIN and MEMBER to update", async () => {
+    const { owner, admin, member, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    for (const [i, who] of [owner, admin, member].entries()) {
+      const res = await patch(who.accessToken, org.id, created.id).send({ notes: `by ${i}` });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("clears an optional field with null", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org, { name: "Acme", notes: "VIP", company: "Acme" });
+    const res = await patch(owner.accessToken, org.id, created.id).send({ notes: null, company: null });
+    expect(res.body.data.customer).toMatchObject({ notes: null, company: null, name: "Acme" });
+  });
+
+  it("trims and lowercases like create does", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    const res = await patch(owner.accessToken, org.id, created.id).send({
+      name: "  New   Name ",
+      email: " Mixed@Case.IO ",
+    });
+    expect(res.body.data.customer).toMatchObject({ name: "New Name", email: "mixed@case.io" });
+  });
+
+  it.each([
+    ["empty body", {}],
+    ["null name", { name: null }],
+    ["empty name", { name: " " }],
+    ["bad email", { email: "nope" }],
+    ["notes too long", { notes: "n".repeat(1001) }],
+    ["organizationId", { organizationId: "00000000-0000-4000-8000-000000000000" }],
+    ["id", { id: "00000000-0000-4000-8000-000000000000" }],
+    ["createdAt", { createdAt: "2020-01-01T00:00:00Z" }],
+    ["unknown field", { name: "A", extra: true }],
+  ])("rejects %s with VALIDATION_ERROR and changes nothing", async (_label, body) => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org, { name: "Acme", notes: "VIP" });
+    expectError(await patch(owner.accessToken, org.id, created.id).send(body), 400, "VALIDATION_ERROR");
+    const row = await prisma.customer.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row).toMatchObject({ name: "Acme", notes: "VIP", organizationId: org.id });
+  });
+
+  it("is CUSTOMER_NOT_FOUND for an unknown id and VALIDATION_ERROR for a malformed one", async () => {
+    const { owner, org } = await setup();
+    expectError(
+      await patch(owner.accessToken, org.id, randomUUID()).send({ name: "X" }),
+      404,
+      "CUSTOMER_NOT_FOUND",
+    );
+    expectError(await patch(owner.accessToken, org.id, "nope").send({ name: "X" }), 400, "VALIDATION_ERROR");
+  });
+
+  it("isolates organizations: B cannot change A's customer, and A's data stays as it was", async () => {
+    const { owner, org, otherOwner, otherOrg } = await setup();
+    const created = await createCustomer(ctx, owner, org, { name: "Acme" });
+
+    expectError(
+      await patch(otherOwner.accessToken, otherOrg.id, created.id).send({ name: "Hijacked" }),
+      404,
+      "CUSTOMER_NOT_FOUND",
+    );
+    expectError(
+      await patch(otherOwner.accessToken, org.id, created.id).send({ name: "Hijacked" }),
+      404,
+      "ORGANIZATION_NOT_FOUND",
+    );
+    const row = await prisma.customer.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row).toMatchObject({ name: "Acme", organizationId: org.id });
+  });
+
+  it("requires a token", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    expectError(await api.patch(path(org.id, created.id)).send({ name: "X" }), 401, "UNAUTHORIZED");
+  });
+});
