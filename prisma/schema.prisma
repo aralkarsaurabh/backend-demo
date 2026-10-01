@@ -31,6 +31,7 @@ model User {
   refreshTokens   RefreshToken[]
   memberships     OrganizationMembership[]
   invitationsSent OrganizationInvitation[]
+  assignedLeads   Lead[]
 }
 
 model RefreshToken {
@@ -74,6 +75,7 @@ model Organization {
   memberships OrganizationMembership[]
   invitations OrganizationInvitation[]
   customers   Customer[]
+  leads       Lead[]
 }
 
 model OrganizationMembership {
@@ -122,8 +124,53 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  convertedFrom Lead?
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WEBSITE
+  REFERRAL
+  SOCIAL_MEDIA
+  EMAIL_CAMPAIGN
+  COLD_OUTREACH
+  EVENT
+  OTHER
+}
+
+model Lead {
+  id                  String      @id @default(uuid())
+  organizationId      String
+  name                String
+  email               String?
+  phone               String?
+  company             String?
+  source              LeadSource?
+  status              LeadStatus  @default(NEW)
+  assignedToUserId    String?
+  notes               String?
+  convertedAt         DateTime?
+  convertedCustomerId String?     @unique
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo        User?        @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  convertedCustomer Customer?    @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([organizationId, assignedToUserId])
 }

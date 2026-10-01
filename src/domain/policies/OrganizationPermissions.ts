@@ -10,6 +10,12 @@ export const OrganizationPermission = {
   CUSTOMER_CREATE: "customer:create",
   CUSTOMER_UPDATE: "customer:update",
   CUSTOMER_DELETE: "customer:delete",
+  LEAD_READ: "lead:read",
+  LEAD_CREATE: "lead:create",
+  LEAD_UPDATE: "lead:update",
+  LEAD_ASSIGN: "lead:assign",
+  LEAD_CONVERT: "lead:convert",
+  LEAD_DELETE: "lead:delete",
 } as const;
 
 export type OrganizationPermission =
@@ -22,6 +28,15 @@ const CUSTOMER_MANAGE = [
   OrganizationPermission.CUSTOMER_UPDATE,
 ] as const;
 
+/** Everything a MEMBER may do with leads: everything except delete. */
+const LEAD_MANAGE = [
+  OrganizationPermission.LEAD_READ,
+  OrganizationPermission.LEAD_CREATE,
+  OrganizationPermission.LEAD_UPDATE,
+  OrganizationPermission.LEAD_ASSIGN,
+  OrganizationPermission.LEAD_CONVERT,
+] as const;
+
 /** Roles map to permissions in code; there is no database-configurable RBAC. */
 export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPermission[]> = {
   OWNER: [
@@ -32,6 +47,8 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.MEMBER_UPDATE_ROLE,
     ...CUSTOMER_MANAGE,
     OrganizationPermission.CUSTOMER_DELETE,
+    ...LEAD_MANAGE,
+    OrganizationPermission.LEAD_DELETE,
   ],
   ADMIN: [
     OrganizationPermission.ORGANIZATION_READ,
@@ -40,11 +57,14 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly OrganizationPer
     OrganizationPermission.MEMBER_REMOVE,
     ...CUSTOMER_MANAGE,
     OrganizationPermission.CUSTOMER_DELETE,
+    ...LEAD_MANAGE,
+    OrganizationPermission.LEAD_DELETE,
   ],
   MEMBER: [
     OrganizationPermission.ORGANIZATION_READ,
     OrganizationPermission.MEMBER_READ,
     ...CUSTOMER_MANAGE,
+    ...LEAD_MANAGE,
   ],
 };
 
