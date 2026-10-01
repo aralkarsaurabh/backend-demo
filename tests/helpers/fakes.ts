@@ -54,6 +54,20 @@ import { UpdateCustomer } from "../../src/application/use-cases/customer/UpdateC
 import { DeleteCustomer } from "../../src/application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
 import { AssignLead } from "../../src/application/use-cases/lead/AssignLead";
+import { AssignTask } from "../../src/application/use-cases/task/AssignTask";
+import { CreateTask } from "../../src/application/use-cases/task/CreateTask";
+import { DeleteTask } from "../../src/application/use-cases/task/DeleteTask";
+import { GetTask } from "../../src/application/use-cases/task/GetTask";
+import { ListTasks } from "../../src/application/use-cases/task/ListTasks";
+import { UpdateTask } from "../../src/application/use-cases/task/UpdateTask";
+import { Task } from "../../src/domain/entities/Task";
+import {
+  CreateTaskData,
+  TaskListQuery,
+  TaskPage,
+  TaskRepository,
+  UpdateTaskData,
+} from "../../src/domain/repositories/TaskRepository";
 import { ConvertLead } from "../../src/application/use-cases/lead/ConvertLead";
 import { CreateLead } from "../../src/application/use-cases/lead/CreateLead";
 import { DeleteLead } from "../../src/application/use-cases/lead/DeleteLead";
@@ -242,6 +256,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
   const leads = new InMemoryLeadRepository(customers, pipelineData);
   const pipelines = new InMemoryPipelineRepository(pipelineData, leads);
   const pipelineStages = new InMemoryPipelineStageRepository(pipelineData, leads);
+  const tasks = new InMemoryTaskRepository();
 
   return {
     users,
@@ -257,6 +272,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     pipelineData,
     pipelines,
     pipelineStages,
+    tasks,
     register: new RegisterUser(users, passwords),
     login: new LoginUser(users, refreshTokens, passwords, tokens),
     refresh: new RefreshTokens(users, refreshTokens, tokens),
@@ -303,6 +319,12 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     reorderPipelineStages: new ReorderPipelineStages(pipelines, pipelineStages),
     moveLeadToStage: new MoveLeadToStage(leads, pipelineStages),
     getPipelineSummary: new GetPipelineSummary(pipelines),
+    createTask: new CreateTask(tasks, new AssignTask(memberships)),
+    getTask: new GetTask(tasks),
+    listTasks: new ListTasks(tasks),
+    assignTask: new AssignTask(memberships),
+    updateTask: new UpdateTask(tasks, new AssignTask(memberships)),
+    deleteTask: new DeleteTask(tasks),
   };
 }
 
@@ -848,5 +870,90 @@ export class InMemoryPipelineStageRepository implements PipelineStageRepository 
       this.data.stages.find((s) => s.id === id)!.position = position;
     }
     return true;
+  }
+}
+
+/**
+ * Like the Prisma repository, every method is scoped to one organization. The overdue filter and
+ * the sort (a total order ending in id, empty due dates last) mirror the SQL in task-repositories.test.ts.
+ */
+export class InMemoryTaskRepository implements TaskRepository {
+  readonly tasks: Task[] = [];
+
+  async create(organizationId: string, data: CreateTaskData) {
+    const now = new Date();
+    const task: Task = {
+      id: randomUUID(),
+      organizationId,
+      title: data.title,
+      description: data.description ?? null,
+      assignedToUserId: data.assignedToUserId ?? null,
+      dueDate: data.dueDate ?? null,
+      status: "TODO",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.tasks.push(task);
+    return { ...task };
+  }
+
+  async findById(organizationId: string, taskId: string) {
+    const row = this.tasks.find((t) => t.id === taskId && t.organizationId === organizationId);
+    return row ? { ...row } : null;
+  }
+
+  async update(organizationId: string, taskId: string, data: UpdateTaskData) {
+    const row = this.tasks.find((t) => t.id === taskId && t.organizationId === organizationId);
+    if (!row) return null;
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) (row as unknown as Record<string, unknown>)[key] = value;
+    }
+    row.updatedAt = new Date();
+    return { ...row };
+  }
+
+  async delete(organizationId: string, taskId: string) {
+    const index = this.tasks.findIndex((t) => t.id === taskId && t.organizationId === organizationId);
+    if (index < 0) return false;
+    this.tasks.splice(index, 1);
+    return true;
+  }
+
+  async list(organizationId: string, query: TaskListQuery): Promise<TaskPage> {
+    const needle = query.search?.toLowerCase();
+    const has = (value: string | null) => value?.toLowerCase().includes(needle!) ?? false;
+    const now = new Date();
+    const matching = this.tasks.filter(
+      (t) =>
+        t.organizationId === organizationId &&
+        (!query.status || t.status === query.status) &&
+        (!query.assignedToUserId || t.assignedToUserId === query.assignedToUserId) &&
+        (!query.dueFrom || (t.dueDate !== null && t.dueDate >= query.dueFrom)) &&
+        (!query.dueTo || (t.dueDate !== null && t.dueDate <= query.dueTo)) &&
+        (!query.overdue ||
+          (t.status !== "COMPLETED" && t.status !== "CANCELLED" && t.dueDate !== null && t.dueDate < now)) &&
+        (!needle || has(t.title) || has(t.description)),
+    );
+
+    const dir = query.sortOrder === "asc" ? 1 : -1;
+    const key = (t: Task) => {
+      const value = t[query.sortBy];
+      return value instanceof Date ? value.getTime() : value;
+    };
+    matching.sort((a, b) => {
+      const [x, y] = [key(a), key(b)];
+      if (x !== y) {
+        if (x === null) return 1; // empty values last, like nulls: "last"
+        if (y === null) return -1;
+        return (x < y ? -1 : 1) * dir;
+      }
+      return (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) * dir;
+    });
+
+    const start = (query.page - 1) * query.limit;
+    return {
+      items: matching.slice(start, start + query.limit).map((t) => ({ ...t })),
+      totalItems: matching.length,
+    };
   }
 }

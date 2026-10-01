@@ -9,6 +9,7 @@ import { PrismaCustomerRepository } from "../../src/infrastructure/database/repo
 import { PrismaLeadRepository } from "../../src/infrastructure/database/repositories/PrismaLeadRepository";
 import { PrismaPipelineRepository } from "../../src/infrastructure/database/repositories/PrismaPipelineRepository";
 import { PrismaPipelineStageRepository } from "../../src/infrastructure/database/repositories/PrismaPipelineStageRepository";
+import { PrismaTaskRepository } from "../../src/infrastructure/database/repositories/PrismaTaskRepository";
 import { PrismaOrganizationInvitationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
 import { PrismaOrganizationMembershipRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
 import { PrismaOrganizationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationRepository";
@@ -33,6 +34,7 @@ export function buildIntegrationApp() {
     leads: new PrismaLeadRepository(prisma),
     pipelines: new PrismaPipelineRepository(prisma),
     pipelineStages: new PrismaPipelineStageRepository(prisma),
+    tasks: new PrismaTaskRepository(prisma),
     passwords: new BcryptPasswordService(4),
     tokens,
   });
@@ -43,6 +45,7 @@ export function buildIntegrationApp() {
 export type IntegrationApp = ReturnType<typeof buildIntegrationApp>;
 
 export async function resetDatabase(prisma: IntegrationApp["prisma"]) {
+  await prisma.task.deleteMany();
   await prisma.lead.deleteMany();
   await prisma.pipelineStage.deleteMany();
   await prisma.pipeline.deleteMany();
@@ -175,6 +178,29 @@ export async function createLead(
     notes: string | null;
     convertedAt: string | null;
     convertedCustomerId: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+/** Creates a task through the API as `actor` and returns it. */
+export async function createTask(
+  ctx: IntegrationApp,
+  actor: SignedUp,
+  org: Org,
+  body: Record<string, unknown> = { title: "Follow up with Rahul" },
+) {
+  const res = await ctx.api
+    .post(`/api/v1/organizations/${org.id}/tasks`)
+    .set(bearer(actor.accessToken))
+    .send(body);
+  return res.body.data.task as {
+    id: string;
+    title: string;
+    description: string | null;
+    assignedToUserId: string | null;
+    dueDate: string | null;
+    status: string;
     createdAt: string;
     updatedAt: string;
   };
