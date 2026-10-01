@@ -8,6 +8,7 @@ import { LoginRequest } from "../../dto/auth/LoginRequest";
 import { toUserResponse } from "../../dto/user/UserResponse";
 import { PasswordService } from "../../services/PasswordService";
 import { TokenService } from "../../services/TokenService";
+import { assertAccountActive } from "./assertAccountActive";
 import { issueTokenPair } from "./issueTokenPair";
 
 export class LoginUser {
@@ -34,6 +35,9 @@ export class LoginUser {
     if (!(await this.passwords.compare(request.password, user.passwordHash))) {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS);
     }
+
+    // After the password check, so a blocked status is only revealed to someone who knows it.
+    assertAccountActive(user);
 
     // A login starts a new token family.
     const { pair, record } = issueTokenPair(this.tokens, user, randomUUID());

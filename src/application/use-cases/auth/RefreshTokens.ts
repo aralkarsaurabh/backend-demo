@@ -5,6 +5,7 @@ import { ErrorCode } from "../../../shared/errors/error-codes";
 import { RefreshResponse } from "../../dto/auth/AuthResponse";
 import { RefreshTokenRequest } from "../../dto/auth/RefreshTokenRequest";
 import { TokenService } from "../../services/TokenService";
+import { assertAccountActive } from "./assertAccountActive";
 import { issueTokenPair } from "./issueTokenPair";
 
 export class RefreshTokens {
@@ -40,6 +41,7 @@ export class RefreshTokens {
 
     const user = await this.users.findById(stored.userId);
     if (!user) throw new AppError(ErrorCode.INVALID_REFRESH_TOKEN);
+    assertAccountActive(user);
 
     // The role is read from the database here, so a refreshed access token
     // always carries the user's current role.
