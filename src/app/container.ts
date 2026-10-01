@@ -15,6 +15,7 @@ import { UpdateOrganizationMemberRole } from "../application/use-cases/organizat
 import { CreateCustomer } from "../application/use-cases/customer/CreateCustomer";
 import { ListCustomers } from "../application/use-cases/customer/ListCustomers";
 import { UpdateCustomer } from "../application/use-cases/customer/UpdateCustomer";
+import { DeleteCustomer } from "../application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../application/use-cases/customer/GetCustomer";
 import { ChangePassword } from "../application/use-cases/user/ChangePassword";
 import { UpdateCurrentUser } from "../application/use-cases/user/UpdateCurrentUser";
@@ -86,6 +87,7 @@ export function buildContainer({
     getCustomer: new GetCustomer(customers),
     listCustomers: new ListCustomers(customers),
     updateCustomer: new UpdateCustomer(customers),
+    deleteCustomer: new DeleteCustomer(customers),
   };
 }
 

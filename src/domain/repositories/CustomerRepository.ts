@@ -60,6 +60,9 @@ export interface CustomerRepository {
     data: UpdateCustomerData,
   ): Promise<Customer | null>;
 
+  /** True if a customer was deleted; false, changing nothing, if none matched. */
+  delete(organizationId: string, customerId: string): Promise<boolean>;
+
   /**
    * One page of the organization's customers. The order is always deterministic: the
    * chosen field, then `id` in the same direction, so equal values never reshuffle pages.

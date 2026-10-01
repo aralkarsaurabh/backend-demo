@@ -6,6 +6,7 @@ import {
   updateCustomerRequestSchema,
 } from "../../../application/dto/customer/CustomerRequests";
 import { CreateCustomer } from "../../../application/use-cases/customer/CreateCustomer";
+import { DeleteCustomer } from "../../../application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../../../application/use-cases/customer/GetCustomer";
 import { UpdateCustomer } from "../../../application/use-cases/customer/UpdateCustomer";
 import { ListCustomers } from "../../../application/use-cases/customer/ListCustomers";
@@ -20,6 +21,7 @@ export interface CustomerUseCases {
   getCustomer: GetCustomer;
   listCustomers: ListCustomers;
   updateCustomer: UpdateCustomer;
+  deleteCustomer: DeleteCustomer;
 }
 
 const currentUser = (req: Request) => {
@@ -78,6 +80,16 @@ export class CustomerController {
         .join(","),
     });
     res.status(200).json(ApiResponse.success("Customer updated successfully.", result));
+  };
+
+  remove = async (req: Request, res: Response) => {
+    const user = currentUser(req);
+    const { organizationId } = currentMembership(req);
+    const { customerId } = parseOrThrow(customerParamsSchema, req.params);
+    await this.useCases.deleteCustomer.execute(organizationId, customerId);
+
+    this.logger.info("customer_deleted", { userId: user.id, organizationId, customerId });
+    res.status(200).json(ApiResponse.success("Customer deleted successfully.", null));
   };
 
   get = async (req: Request, res: Response) => {

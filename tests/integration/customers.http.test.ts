@@ -455,3 +455,67 @@ describe("PATCH /organizations/:organizationId/customers/:customerId", () => {
     expectError(await api.patch(path(org.id, created.id)).send({ name: "X" }), 401, "UNAUTHORIZED");
   });
 });
+
+describe("DELETE /organizations/:organizationId/customers/:customerId", () => {
+  const remove = (token: string, orgId: string, customerId: string) =>
+    api.delete(path(orgId, customerId)).set(bearer(token));
+
+  it.each(["owner", "admin"] as const)("lets the %s delete a customer for good", async (role) => {
+    const ctxData = await setup();
+    const created = await createCustomer(ctx, ctxData.member, ctxData.org, { name: "Acme" });
+    const other = await createCustomer(ctx, ctxData.owner, ctxData.org, { name: "Keep" });
+
+    const res = await remove(ctxData[role].accessToken, ctxData.org.id, created.id);
+
+    expect(res.status).toBe(200);
+    expectEnvelope(res.body, true);
+    expect(res.body.message).toBe("Customer deleted successfully.");
+    expect(res.body.data).toBeNull();
+    expect(await prisma.customer.findUnique({ where: { id: created.id } })).toBeNull(); // hard delete
+    expect(await prisma.customer.findUnique({ where: { id: other.id } })).not.toBeNull();
+    expectError(
+      await api.get(path(ctxData.org.id, created.id)).set(bearer(ctxData.owner.accessToken)),
+      404,
+      "CUSTOMER_NOT_FOUND",
+    );
+  });
+
+  it("refuses a MEMBER with INSUFFICIENT_ORGANIZATION_PERMISSION and keeps the customer", async () => {
+    const { owner, member, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    expectError(
+      await remove(member.accessToken, org.id, created.id),
+      403,
+      "INSUFFICIENT_ORGANIZATION_PERMISSION",
+    );
+    expect(await prisma.customer.count({ where: { id: created.id } })).toBe(1);
+  });
+
+  it("is CUSTOMER_NOT_FOUND the second time and for an unknown id", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    expect((await remove(owner.accessToken, org.id, created.id)).status).toBe(200);
+    expectError(await remove(owner.accessToken, org.id, created.id), 404, "CUSTOMER_NOT_FOUND");
+    expectError(await remove(owner.accessToken, org.id, randomUUID()), 404, "CUSTOMER_NOT_FOUND");
+  });
+
+  it("rejects a malformed customer id", async () => {
+    const { owner, org } = await setup();
+    expectError(await remove(owner.accessToken, org.id, "nope"), 400, "VALIDATION_ERROR");
+  });
+
+  it("isolates organizations: B's owner cannot delete A's customer", async () => {
+    const { owner, org, otherOwner, otherOrg } = await setup();
+    const created = await createCustomer(ctx, owner, org, { name: "Acme" });
+
+    expectError(await remove(otherOwner.accessToken, otherOrg.id, created.id), 404, "CUSTOMER_NOT_FOUND");
+    expectError(await remove(otherOwner.accessToken, org.id, created.id), 404, "ORGANIZATION_NOT_FOUND");
+    expect(await prisma.customer.count({ where: { id: created.id } })).toBe(1);
+  });
+
+  it("requires a token", async () => {
+    const { owner, org } = await setup();
+    const created = await createCustomer(ctx, owner, org);
+    expectError(await api.delete(path(org.id, created.id)), 401, "UNAUTHORIZED");
+  });
+});

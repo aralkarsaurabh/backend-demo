@@ -28,6 +28,7 @@ import {
 import { CreateCustomer } from "../../src/application/use-cases/customer/CreateCustomer";
 import { ListCustomers } from "../../src/application/use-cases/customer/ListCustomers";
 import { UpdateCustomer } from "../../src/application/use-cases/customer/UpdateCustomer";
+import { DeleteCustomer } from "../../src/application/use-cases/customer/DeleteCustomer";
 import { GetCustomer } from "../../src/application/use-cases/customer/GetCustomer";
 import { Organization } from "../../src/domain/entities/Organization";
 import { OrganizationInvitation } from "../../src/domain/entities/OrganizationInvitation";
@@ -236,6 +237,7 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     getCustomer: new GetCustomer(customers),
     listCustomers: new ListCustomers(customers),
     updateCustomer: new UpdateCustomer(customers),
+    deleteCustomer: new DeleteCustomer(customers),
   };
 }
 
@@ -438,6 +440,13 @@ export class InMemoryCustomerRepository implements CustomerRepository {
     }
     row.updatedAt = new Date();
     return { ...row };
+  }
+
+  async delete(organizationId: string, customerId: string) {
+    const index = this.customers.findIndex((c) => c.id === customerId && c.organizationId === organizationId);
+    if (index < 0) return false;
+    this.customers.splice(index, 1);
+    return true;
   }
 
   /** Mirrors the SQL: filters, a total order ending in id, then the page. */

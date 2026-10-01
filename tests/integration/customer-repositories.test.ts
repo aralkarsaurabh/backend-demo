@@ -241,3 +241,32 @@ describe("PrismaCustomerRepository.update", () => {
     expect(await customers.update(org.id, randomUUID(), { name: "X" })).toBeNull();
   });
 });
+
+describe("PrismaCustomerRepository.delete", () => {
+  it("deletes only the named customer and returns true", async () => {
+    const org = await newOrg();
+    const gone = await customers.create(org.id, { name: "Gone" });
+    const keep = await customers.create(org.id, { name: "Keep" });
+
+    expect(await customers.delete(org.id, gone.id)).toBe(true);
+    expect(await customers.findById(org.id, gone.id)).toBeNull();
+    expect(await customers.findById(org.id, keep.id)).not.toBeNull();
+  });
+
+  it("returns false and deletes nothing for another organization's customer", async () => {
+    const a = await newOrg("a");
+    const b = await newOrg("b");
+    const created = await customers.create(a.id, { name: "Acme" });
+
+    expect(await customers.delete(b.id, created.id)).toBe(false);
+    expect(await prisma.customer.count({ where: { id: created.id } })).toBe(1);
+  });
+
+  it("returns false for an unknown id, and when called twice", async () => {
+    const org = await newOrg();
+    const created = await customers.create(org.id, { name: "Gone" });
+    expect(await customers.delete(org.id, randomUUID())).toBe(false);
+    expect(await customers.delete(org.id, created.id)).toBe(true);
+    expect(await customers.delete(org.id, created.id)).toBe(false);
+  });
+});

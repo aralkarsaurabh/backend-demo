@@ -37,6 +37,13 @@ export class PrismaCustomerRepository implements CustomerRepository {
     }
   }
 
+  async delete(organizationId: string, customerId: string): Promise<boolean> {
+    const { count } = await this.prisma.customer.deleteMany({
+      where: { id: customerId, organizationId },
+    });
+    return count > 0;
+  }
+
   async list(organizationId: string, query: CustomerListQuery): Promise<CustomerPage> {
     const where = buildWhere(organizationId, query);
     const [items, totalItems] = await this.prisma.$transaction([

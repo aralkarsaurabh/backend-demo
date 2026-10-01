@@ -179,3 +179,32 @@ describe("UpdateCustomer", () => {
     expect((await app.getCustomer.execute(orgA, customer.id)).customer.name).toBe("Acme");
   });
 });
+
+describe("DeleteCustomer", () => {
+  it("removes the customer and nothing else", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, { name: "Gone" });
+    const { customer: keep } = await app.createCustomer.execute(orgA, { name: "Keep" });
+
+    await app.deleteCustomer.execute(orgA, customer.id);
+
+    await expect(app.getCustomer.execute(orgA, customer.id)).rejects.toMatchObject({ code: "CUSTOMER_NOT_FOUND" });
+    expect((await app.getCustomer.execute(orgA, keep.id)).customer.name).toBe("Keep");
+  });
+
+  it("is CUSTOMER_NOT_FOUND the second time, and for an unknown id", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, { name: "Gone" });
+    await app.deleteCustomer.execute(orgA, customer.id);
+
+    await expect(app.deleteCustomer.execute(orgA, customer.id)).rejects.toMatchObject({ code: "CUSTOMER_NOT_FOUND" });
+    await expect(app.deleteCustomer.execute(orgA, randomUUID())).rejects.toMatchObject({ code: "CUSTOMER_NOT_FOUND" });
+  });
+
+  it("is CUSTOMER_NOT_FOUND for another organization's customer, which stays", async () => {
+    const app = buildApp();
+    const { customer } = await app.createCustomer.execute(orgA, { name: "Acme" });
+    await expect(app.deleteCustomer.execute(orgB, customer.id)).rejects.toMatchObject({ code: "CUSTOMER_NOT_FOUND" });
+    expect((await app.getCustomer.execute(orgA, customer.id)).customer.id).toBe(customer.id);
+  });
+});

@@ -113,5 +113,13 @@ export function createRoutes(container: Container, logger: Logger): Router {
     customers.update,
   );
 
+  router.delete(
+    "/organizations/:organizationId/customers/:customerId",
+    requireAuth,
+    requireMembership,
+    requireOrganizationPermission(OrganizationPermission.CUSTOMER_DELETE),
+    customers.remove,
+  );
+
   return router;
 }
