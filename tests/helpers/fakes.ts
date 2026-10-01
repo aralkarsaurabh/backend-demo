@@ -1,4 +1,27 @@
 import { randomUUID } from "node:crypto";
+import { CreatePipeline } from "../../src/application/use-cases/pipeline/CreatePipeline";
+import { ListPipelines } from "../../src/application/use-cases/pipeline/ListPipelines";
+import { GetPipeline } from "../../src/application/use-cases/pipeline/GetPipeline";
+import { UpdatePipeline } from "../../src/application/use-cases/pipeline/UpdatePipeline";
+import { DeletePipeline } from "../../src/application/use-cases/pipeline/DeletePipeline";
+import { CreatePipelineStage } from "../../src/application/use-cases/pipeline/CreatePipelineStage";
+import { UpdatePipelineStage } from "../../src/application/use-cases/pipeline/UpdatePipelineStage";
+import { DeletePipelineStage } from "../../src/application/use-cases/pipeline/DeletePipelineStage";
+import { ReorderPipelineStages } from "../../src/application/use-cases/pipeline/ReorderPipelineStages";
+import { MoveLeadToStage } from "../../src/application/use-cases/pipeline/MoveLeadToStage";
+import { GetPipelineSummary } from "../../src/application/use-cases/pipeline/GetPipelineSummary";
+import { Pipeline, PipelineStage, PipelineWithStages } from "../../src/domain/entities/Pipeline";
+import {
+  CreatePipelineData,
+  PipelineRepository,
+  PipelineSummary,
+  UpdatePipelineData,
+} from "../../src/domain/repositories/PipelineRepository";
+import {
+  CreatePipelineStageData,
+  PipelineStageRepository,
+  UpdatePipelineStageData,
+} from "../../src/domain/repositories/PipelineStageRepository";
 import { PasswordService } from "../../src/application/services/PasswordService";
 import { LoginUser } from "../../src/application/use-cases/auth/LoginUser";
 import { LogoutUser } from "../../src/application/use-cases/auth/LogoutUser";
@@ -215,7 +238,10 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
   const memberships = new InMemoryOrganizationMembershipRepository(orgData, users);
   const invitations = new InMemoryOrganizationInvitationRepository(orgData);
   const customers = new InMemoryCustomerRepository();
-  const leads = new InMemoryLeadRepository(customers);
+  const pipelineData = new InMemoryPipelineData();
+  const leads = new InMemoryLeadRepository(customers, pipelineData);
+  const pipelines = new InMemoryPipelineRepository(pipelineData, leads);
+  const pipelineStages = new InMemoryPipelineStageRepository(pipelineData, leads);
 
   return {
     users,
@@ -228,6 +254,9 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     invitations,
     customers,
     leads,
+    pipelineData,
+    pipelines,
+    pipelineStages,
     register: new RegisterUser(users, passwords),
     login: new LoginUser(users, refreshTokens, passwords, tokens),
     refresh: new RefreshTokens(users, refreshTokens, tokens),
@@ -263,6 +292,17 @@ export function buildApp(ttl?: { access: number; refresh: number }) {
     updateLead: new UpdateLead(leads, new AssignLead(memberships)),
     deleteLead: new DeleteLead(leads),
     convertLead: new ConvertLead(leads),
+    createPipeline: new CreatePipeline(pipelines),
+    listPipelines: new ListPipelines(pipelines),
+    getPipeline: new GetPipeline(pipelines),
+    updatePipeline: new UpdatePipeline(pipelines),
+    deletePipeline: new DeletePipeline(pipelines),
+    createPipelineStage: new CreatePipelineStage(pipelineStages),
+    updatePipelineStage: new UpdatePipelineStage(pipelines, pipelineStages),
+    deletePipelineStage: new DeletePipelineStage(pipelines, pipelineStages),
+    reorderPipelineStages: new ReorderPipelineStages(pipelines, pipelineStages),
+    moveLeadToStage: new MoveLeadToStage(leads, pipelineStages),
+    getPipelineSummary: new GetPipelineSummary(pipelines),
   };
 }
 
@@ -518,7 +558,10 @@ export class InMemoryCustomerRepository implements CustomerRepository {
 export class InMemoryLeadRepository implements LeadRepository {
   readonly leads: Lead[] = [];
 
-  constructor(private readonly customers: InMemoryCustomerRepository) {}
+  constructor(
+    private readonly customers: InMemoryCustomerRepository,
+    private readonly pipelineData: InMemoryPipelineData = new InMemoryPipelineData(),
+  ) {}
 
   async create(organizationId: string, data: CreateLeadData) {
     const now = new Date();
@@ -535,6 +578,7 @@ export class InMemoryLeadRepository implements LeadRepository {
       notes: data.notes ?? null,
       convertedAt: null,
       convertedCustomerId: null,
+      pipelineStageId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -601,6 +645,19 @@ export class InMemoryLeadRepository implements LeadRepository {
     };
   }
 
+  /** Mirrors the SQL: the stage is reached through its pipeline's organization, and a converted lead is refused. */
+  async moveToStage(organizationId: string, leadId: string, stageId: string) {
+    const stage = this.pipelineData.stages.find((s) => s.id === stageId);
+    const pipeline = stage && this.pipelineData.pipelines.find((p) => p.id === stage.pipelineId);
+    if (!stage || pipeline?.organizationId !== organizationId) return null;
+
+    const row = this.leads.find((l) => l.id === leadId && l.organizationId === organizationId);
+    if (!row || row.status === "CONVERTED") return null;
+    row.pipelineStageId = stage.id;
+    row.updatedAt = new Date();
+    return { ...row };
+  }
+
   async convert(organizationId: string, leadId: string): Promise<ConvertedLead | null> {
     const row = this.leads.find((l) => l.id === leadId && l.organizationId === organizationId);
     if (!row) return null;
@@ -618,5 +675,178 @@ export class InMemoryLeadRepository implements LeadRepository {
     row.convertedCustomerId = customer.id;
     row.updatedAt = new Date();
     return { lead: { ...row }, customer };
+  }
+}
+
+
+/** The pipeline and stage fakes share one store, as the real tables do. */
+export class InMemoryPipelineData {
+  pipelines: Pipeline[] = [];
+  stages: PipelineStage[] = [];
+
+  stagesOf(pipelineId: string): PipelineStage[] {
+    return this.stages
+      .filter((s) => s.pipelineId === pipelineId)
+      .sort((a, b) => a.position - b.position)
+      .map((s) => ({ ...s }));
+  }
+
+  /** The pipeline, only if it belongs to the organization. */
+  pipelineIn(organizationId: string, pipelineId: string) {
+    return this.pipelines.find((p) => p.id === pipelineId && p.organizationId === organizationId);
+  }
+}
+
+/** Like the Prisma repository: scoped to one organization, with the same refusals as the SQL constraints. */
+export class InMemoryPipelineRepository implements PipelineRepository {
+  constructor(
+    private readonly data: InMemoryPipelineData,
+    private readonly leads: InMemoryLeadRepository,
+  ) {}
+
+  private view(pipeline: Pipeline): PipelineWithStages {
+    return { ...pipeline, stages: this.data.stagesOf(pipeline.id) };
+  }
+
+  private nameTaken(organizationId: string, name: string, exceptId?: string) {
+    return this.data.pipelines.some(
+      (p) => p.organizationId === organizationId && p.name === name && p.id !== exceptId,
+    );
+  }
+
+  async create(organizationId: string, input: CreatePipelineData) {
+    if (this.nameTaken(organizationId, input.name)) throw new AppError(ErrorCode.PIPELINE_ALREADY_EXISTS);
+    const now = new Date();
+    const pipeline: Pipeline = {
+      id: randomUUID(),
+      organizationId,
+      name: input.name,
+      description: input.description ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.data.pipelines.push(pipeline);
+    return this.view(pipeline);
+  }
+
+  async findById(organizationId: string, pipelineId: string) {
+    const pipeline = this.data.pipelineIn(organizationId, pipelineId);
+    return pipeline ? this.view(pipeline) : null;
+  }
+
+  async findMany(organizationId: string) {
+    return this.data.pipelines.filter((p) => p.organizationId === organizationId).map((p) => this.view(p));
+  }
+
+  async update(organizationId: string, pipelineId: string, input: UpdatePipelineData) {
+    const pipeline = this.data.pipelineIn(organizationId, pipelineId);
+    if (!pipeline) return null;
+    if (input.name !== undefined && this.nameTaken(organizationId, input.name, pipelineId)) {
+      throw new AppError(ErrorCode.PIPELINE_ALREADY_EXISTS);
+    }
+    if (input.name !== undefined) pipeline.name = input.name;
+    if (input.description !== undefined) pipeline.description = input.description;
+    pipeline.updatedAt = new Date();
+    return this.view(pipeline);
+  }
+
+  async delete(organizationId: string, pipelineId: string) {
+    const pipeline = this.data.pipelineIn(organizationId, pipelineId);
+    if (!pipeline) return false;
+    if (this.data.stagesOf(pipelineId).length > 0) throw new AppError(ErrorCode.PIPELINE_NOT_EMPTY);
+    this.data.pipelines.splice(this.data.pipelines.indexOf(pipeline), 1);
+    return true;
+  }
+
+  async getSummary(organizationId: string, pipelineId: string): Promise<PipelineSummary | null> {
+    const pipeline = this.data.pipelineIn(organizationId, pipelineId);
+    if (!pipeline) return null;
+    const stages = this.data.stagesOf(pipelineId).map((s) => ({
+      id: s.id,
+      name: s.name,
+      position: s.position,
+      leadCount: this.leads.leads.filter((l) => l.pipelineStageId === s.id && l.organizationId === organizationId)
+        .length,
+    }));
+    return {
+      pipeline: { id: pipeline.id, name: pipeline.name },
+      stages,
+      totalLeads: stages.reduce((total, s) => total + s.leadCount, 0),
+    };
+  }
+}
+
+export class InMemoryPipelineStageRepository implements PipelineStageRepository {
+  constructor(
+    private readonly data: InMemoryPipelineData,
+    private readonly leads: InMemoryLeadRepository,
+  ) {}
+
+  private nameTaken(pipelineId: string, name: string, exceptId?: string) {
+    return this.data.stages.some((s) => s.pipelineId === pipelineId && s.name === name && s.id !== exceptId);
+  }
+
+  async create(organizationId: string, pipelineId: string, input: CreatePipelineStageData) {
+    if (!this.data.pipelineIn(organizationId, pipelineId)) return null;
+    if (this.nameTaken(pipelineId, input.name)) throw new AppError(ErrorCode.PIPELINE_STAGE_ALREADY_EXISTS);
+    const existing = this.data.stagesOf(pipelineId);
+    const now = new Date();
+    const stage: PipelineStage = {
+      id: randomUUID(),
+      pipelineId,
+      name: input.name,
+      position: existing.length === 0 ? 0 : existing[existing.length - 1].position + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.data.stages.push(stage);
+    return { ...stage };
+  }
+
+  async findById(organizationId: string, stageId: string) {
+    const stage = this.data.stages.find((s) => s.id === stageId);
+    return stage && this.data.pipelineIn(organizationId, stage.pipelineId) ? { ...stage } : null;
+  }
+
+  private inPipeline(organizationId: string, pipelineId: string, stageId: string) {
+    if (!this.data.pipelineIn(organizationId, pipelineId)) return undefined;
+    return this.data.stages.find((s) => s.id === stageId && s.pipelineId === pipelineId);
+  }
+
+  async update(organizationId: string, pipelineId: string, stageId: string, input: UpdatePipelineStageData) {
+    const stage = this.inPipeline(organizationId, pipelineId, stageId);
+    if (!stage) return null;
+    if (this.nameTaken(pipelineId, input.name, stageId)) throw new AppError(ErrorCode.PIPELINE_STAGE_ALREADY_EXISTS);
+    stage.name = input.name;
+    stage.updatedAt = new Date();
+    return { ...stage };
+  }
+
+  async delete(organizationId: string, pipelineId: string, stageId: string) {
+    const stage = this.inPipeline(organizationId, pipelineId, stageId);
+    if (!stage) return false;
+    if (this.leads.leads.some((l) => l.pipelineStageId === stageId)) throw new AppError(ErrorCode.PIPELINE_STAGE_IN_USE);
+
+    this.data.stages.splice(this.data.stages.indexOf(stage), 1);
+    for (const later of this.data.stages) {
+      if (later.pipelineId === pipelineId && later.position > stage.position) later.position -= 1;
+    }
+    return true;
+  }
+
+  async reorder(organizationId: string, pipelineId: string, stageIds: string[]) {
+    if (!this.data.pipelineIn(organizationId, pipelineId)) return false;
+    const current = this.data.stagesOf(pipelineId);
+    const submitted = new Set(stageIds);
+    const isExactPermutation =
+      submitted.size === stageIds.length &&
+      stageIds.length === current.length &&
+      current.every((s) => submitted.has(s.id));
+    if (!isExactPermutation) throw new AppError(ErrorCode.INVALID_STAGE_ORDER);
+
+    for (const [position, id] of stageIds.entries()) {
+      this.data.stages.find((s) => s.id === id)!.position = position;
+    }
+    return true;
   }
 }

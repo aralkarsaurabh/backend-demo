@@ -7,6 +7,8 @@ import { JwtTokenService } from "../../src/infrastructure/authentication/JwtToke
 import { createPrismaClient } from "../../src/infrastructure/database/prisma";
 import { PrismaCustomerRepository } from "../../src/infrastructure/database/repositories/PrismaCustomerRepository";
 import { PrismaLeadRepository } from "../../src/infrastructure/database/repositories/PrismaLeadRepository";
+import { PrismaPipelineRepository } from "../../src/infrastructure/database/repositories/PrismaPipelineRepository";
+import { PrismaPipelineStageRepository } from "../../src/infrastructure/database/repositories/PrismaPipelineStageRepository";
 import { PrismaOrganizationInvitationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationInvitationRepository";
 import { PrismaOrganizationMembershipRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationMembershipRepository";
 import { PrismaOrganizationRepository } from "../../src/infrastructure/database/repositories/PrismaOrganizationRepository";
@@ -29,6 +31,8 @@ export function buildIntegrationApp() {
     organizationInvitations: new PrismaOrganizationInvitationRepository(prisma),
     customers: new PrismaCustomerRepository(prisma),
     leads: new PrismaLeadRepository(prisma),
+    pipelines: new PrismaPipelineRepository(prisma),
+    pipelineStages: new PrismaPipelineStageRepository(prisma),
     passwords: new BcryptPasswordService(4),
     tokens,
   });
@@ -40,6 +44,8 @@ export type IntegrationApp = ReturnType<typeof buildIntegrationApp>;
 
 export async function resetDatabase(prisma: IntegrationApp["prisma"]) {
   await prisma.lead.deleteMany();
+  await prisma.pipelineStage.deleteMany();
+  await prisma.pipeline.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.organizationInvitation.deleteMany();
   await prisma.organizationMembership.deleteMany();

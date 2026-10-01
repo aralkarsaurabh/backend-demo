@@ -48,6 +48,7 @@ describe("CreateLead", () => {
       notes: null,
       convertedAt: null,
       convertedCustomerId: null,
+      pipelineStageId: null,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
     });
