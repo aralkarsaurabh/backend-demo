@@ -2,6 +2,7 @@ import { Router } from "express";
 import { UserRole } from "../domain/enums/UserRole";
 import { OrganizationPermission } from "../domain/policies/OrganizationPermissions";
 import { AuthController } from "../infrastructure/http/controllers/AuthController";
+import { HealthController } from "../infrastructure/http/controllers/HealthController";
 import { OrganizationController } from "../infrastructure/http/controllers/OrganizationController";
 import { UserController } from "../infrastructure/http/controllers/UserController";
 import { Logger } from "../shared/logger";
@@ -17,10 +18,13 @@ export function createRoutes(container: Container, logger: Logger): Router {
   const auth = new AuthController(container, logger);
   const users = new UserController(container.getCurrentUser, container.listUsers);
   const organizations = new OrganizationController(container, logger);
+  const health = new HealthController();
   const requireAuth = authenticate(container.tokens);
   const requireMembership = requireOrganizationMembership(container.organizationMemberships);
 
   const router = Router();
+
+  router.get("/health", health.check);
 
   router.post("/auth/register", auth.register);
   router.post("/auth/login", auth.login);
