@@ -1,9 +1,9 @@
 # backend-demo
 
-Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`), plus multi-tenant organizations (membership, invitations, `OWNER`/`ADMIN`/`MEMBER`) and user management (profile, name, password change, platform account status).
+Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`), plus multi-tenant organizations (membership, invitations, `OWNER`/`ADMIN`/`MEMBER`) user management (profile, name, password change, platform account status) and organization-scoped customers (CRUD, search, filters, pagination).
 
-- User-facing docs: `README.md`, `documentation/authentication-and-authorisation.md` and `documentation/organizations.md` and `documentation/user-management.md` (keep them in sync when behaviour changes).
-- Specs: `docs/feature-contracts/20261001073651-authentication-authorization.md`, `docs/feature-contracts/20261001103000-organizations.md` and `docs/feature-contracts/20261001120000-user-management.md`.
+- User-facing docs: `README.md`, `documentation/authentication-and-authorisation.md` and `documentation/organizations.md` and `documentation/user-management.md` and `documentation/customers.md` (keep them in sync when behaviour changes).
+- Specs: `docs/feature-contracts/20261001073651-authentication-authorization.md`, `docs/feature-contracts/20261001103000-organizations.md` `docs/feature-contracts/20261001120000-user-management.md` and `docs/feature-contracts/20261001150000-customer-management.md`.
 
 ## Commands
 
@@ -81,3 +81,4 @@ No rate limiting or lockout (first thing to add before public exposure; it also 
 | 20261001073651-authentication-authorization.md | Read | 2026-10-01 |
 | 20261001103000-organizations.md | Read | 2026-10-01 |
 | 20261001120000-user-management.md | Read | 2026-10-01 |
+| 20261001150000-customer-management.md | Read | 2026-10-01 |
