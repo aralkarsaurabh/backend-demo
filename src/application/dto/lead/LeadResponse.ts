@@ -12,6 +12,7 @@ export interface LeadResponse {
   notes: string | null;
   convertedAt: string | null;
   convertedCustomerId: string | null;
+  pipelineStageId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +30,7 @@ export const toLeadResponse = (lead: Lead): LeadResponse => ({
   notes: lead.notes,
   convertedAt: lead.convertedAt?.toISOString() ?? null,
   convertedCustomerId: lead.convertedCustomerId,
+  pipelineStageId: lead.pipelineStageId,
   createdAt: lead.createdAt.toISOString(),
   updatedAt: lead.updatedAt.toISOString(),
 });
