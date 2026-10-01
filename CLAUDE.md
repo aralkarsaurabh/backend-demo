@@ -1,9 +1,9 @@
 # backend-demo
 
-Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`), plus multi-tenant organizations (membership, invitations, `OWNER`/`ADMIN`/`MEMBER`) user management (profile, name, password change, platform account status) and organization-scoped customers (CRUD, search, filters, pagination).
+Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and authorisation: register/login, access + rotating refresh tokens with reuse detection, logout, and role-based access (`USER`, `ADMIN`), plus multi-tenant organizations (membership, invitations, `OWNER`/`ADMIN`/`MEMBER`) user management (profile, name, password change, platform account status) and organization-scoped customers (CRUD, search, filters, pagination) and organization-scoped leads (CRUD, assignment, search, filters, pagination, atomic lead-to-customer conversion).
 
-- User-facing docs: `README.md`, `documentation/authentication-and-authorisation.md` and `documentation/organizations.md` and `documentation/user-management.md` and `documentation/customers.md` (keep them in sync when behaviour changes).
-- Specs: `docs/feature-contracts/20261001073651-authentication-authorization.md`, `docs/feature-contracts/20261001103000-organizations.md` `docs/feature-contracts/20261001120000-user-management.md` and `docs/feature-contracts/20261001150000-customer-management.md`.
+- User-facing docs: `README.md`, `documentation/authentication-and-authorisation.md` and `documentation/organizations.md` and `documentation/user-management.md` and `documentation/customers.md` and `documentation/leads.md` (keep them in sync when behaviour changes).
+- Specs: `docs/feature-contracts/20261001073651-authentication-authorization.md`, `docs/feature-contracts/20261001103000-organizations.md` `docs/feature-contracts/20261001120000-user-management.md` `docs/feature-contracts/20261001150000-customer-management.md` and `docs/feature-contracts/20261001170000-lead-management.md`.
 
 ## Commands
 
@@ -11,7 +11,7 @@ Express 5 + TypeScript + PostgreSQL (Prisma 7) API for authentication and author
 |---|---|
 | `npm run dev` | Run with `tsx watch` |
 | `npm run typecheck` | `tsc --noEmit`. Run before committing; it also checks `tests/`. |
-| `npm test` | All tests (430). Needs the `_test` database to exist, see below. |
+| `npm test` | All tests (498). Needs the `_test` database to exist, see below. |
 | `npm run prisma:generate` | Required after a fresh install and after any `schema.prisma` change. The client in `generated/prisma` is git-ignored. |
 | `npx prisma migrate deploy` | The **only** way schema migrations are applied |
 | `npm run seed:deploy` | The **only** way seeds are applied |
@@ -37,6 +37,7 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 - Login must give the same response for unknown email and wrong password, and run a dummy bcrypt compare for unknown emails.
 - **User management (see the user-management contract, D11-D15):** `User.status` is a platform property and affects authentication only. Suspend/deactivate revokes all refresh tokens (`revokeAllForUser`) but D1 stays: no status read in `authenticate()`. Login reveals a blocked status only after a correct password. An admin cannot change their own status. Password change revokes all refresh tokens. Do not add email or role to `PATCH /users/me`.
 - **Customers (see the customer contract, D16-D23):** a customer belongs to one organization, and every `CustomerRepository` method takes `organizationId` and filters on it. Access comes from the organization membership, never `User.role`. A customer of another organization is `404 CUSTOMER_NOT_FOUND`. The body never carries `organizationId` (strict schemas). Sorting is a whitelist, the list order always ends in `id`, and search escapes `%` and `_` (Prisma's `contains` does not). Hard delete. The real-SQL tests in `tests/integration/customer-repositories.test.ts` prove each guard fails when removed; keep them.
+- **Leads (see the lead contract, D24-D33):** a lead belongs to one organization, and every `LeadRepository` method takes `organizationId` and filters on it. Access comes from the organization membership, never `User.role`. A lead of another organization is `404 LEAD_NOT_FOUND`. The assignee must be a member of the same organization (`ASSIGNED_USER_NOT_MEMBER`, the same error for an unknown user). `CONVERTED` is set only by `POST .../convert`, never by `PATCH`; `LeadRepository.convert` is one transaction (create the customer, then a `status <> 'CONVERTED'` guarded lead update that throws and rolls back on no match), and a converted lead is read-only (`409 LEAD_ALREADY_CONVERTED`). A lead's fields obey the customer limits so a lead is always convertible. Hard delete. The real-SQL tests in `tests/integration/lead-repositories.test.ts` prove each guard fails when removed; keep them.
 - **Organizations (see the organizations contract, D5-D10):** the JWT never carries organization data; `requireOrganizationMembership()` reads the membership from the DB on every request (D5). One `OWNER` per organization for life, enforced by a partial unique index (D6). Invitation tokens are returned once and stored only as SHA-256 (D7). Non-members get `404 ORGANIZATION_NOT_FOUND`, never 403 (D9). A platform `ADMIN` has no special organization access (D10). Do not add a way to assign `OWNER`.
 - Atomic organization operations are single repository methods (`createWithOwner`, invitation `accept`, guarded `updateRole`/`remove`), so use cases never manage transactions. The real-SQL tests in `tests/integration/organization-repositories.test.ts` prove each guard fails when removed; keep them.
 
@@ -73,7 +74,7 @@ Clean Architecture + Repository pattern + DTOs. Flow: route → controller → u
 
 ## Known gaps (see documentation section 8)
 
-No rate limiting or lockout (first thing to add before public exposure; it also covers invitation creation/acceptance), no email delivery, invitation revoke/list, ownership transfer or pagination for organizations, no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles, no email change, no immediate suspension of already-issued access tokens, customer search has no trigram or full-text index, and customers have no soft delete, uniqueness rule or audit history.
+No rate limiting or lockout (first thing to add before public exposure; it also covers invitation creation/acceptance), no email delivery, invitation revoke/list, ownership transfer or pagination for organizations, no cleanup of old refresh tokens, no absolute session lifetime, no email verification or password reset, no endpoint to change roles, no email change, no immediate suspension of already-issued access tokens, customer search has no trigram or full-text index, customers have no soft delete, uniqueness rule or audit history, and leads have no status history or duplicate detection, and a member removed from an organization stays assigned to their leads.
 
 ## Feature Contracts
 

@@ -3,7 +3,7 @@
 Official documentation for the organizations feature of `backend-demo`: creating organizations, inviting people, and managing members with organization-level roles.
 
 - **Specification:** [`docs/feature-contracts/20261001103000-organizations.md`](../docs/feature-contracts/20261001103000-organizations.md) is the agreed feature contract this implementation follows. This document describes what was built and how to use and operate it.
-- **Customers:** organization-scoped customers reuse this membership check and permission policy. See [customers.md](customers.md).
+- **Customers:** organization-scoped customers reuse this membership check and permission policy. See [customers.md](customers.md). Leads do the same: see [leads.md](leads.md).
 - **Builds on:** [Authentication & Authorisation](authentication-and-authorisation.md). Nothing in that feature changed: same tokens, same envelope, same error mechanism.
 - **Status:** implemented; 117 of the project's 232 automated tests cover it.
 

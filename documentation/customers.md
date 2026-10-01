@@ -23,6 +23,8 @@ A **customer** belongs to exactly one **organization**. There is no global custo
 
 Fields: `name` (required), `email`, `phone`, `company`, `notes` (optional). Nothing else (no addresses, tags, invoices or contacts).
 
+A customer can also be created by converting a [lead](leads.md); the customer is then an ordinary customer, and deleting it leaves the lead `CONVERTED` with no customer link.
+
 ## 2. Decisions
 
 | # | Decision |
