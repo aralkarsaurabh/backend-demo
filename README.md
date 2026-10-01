@@ -1,6 +1,6 @@
 # backend-demo
 
-A backend API for **authentication and authorisation**: user registration and login, short-lived access tokens, rotating refresh tokens with reuse detection, logout, role-based access control, and multi-tenant organizations with invitations and organization-level roles, plus organization-scoped customer, lead and sales pipeline management.
+A backend API for **authentication and authorisation**: user registration and login, short-lived access tokens, rotating refresh tokens with reuse detection, logout, role-based access control, and multi-tenant organizations with invitations and organization-level roles, plus organization-scoped customer, lead, sales pipeline and task management.
 
 Built with Node.js, Express 5, TypeScript, PostgreSQL, Prisma 7, Zod, JWT and bcrypt, structured as Clean Architecture so business logic stays independent of the framework, database and libraries.
 
@@ -18,6 +18,7 @@ Built with Node.js, Express 5, TypeScript, PostgreSQL, Prisma 7, Zod, JWT and bc
 - **Customers:** create, read, update and delete an organization's customers, with search, a company filter, a date range, sorting and pagination. A customer is only ever visible to members of its own organization
 - **Leads:** capture, work and assign an organization's leads (status, source, search, filters, pagination), and convert a lead into a customer in one atomic step. Leads are only ever visible to members of their own organization
 - **Sales pipelines:** define an organization's pipelines and their ordered stages, reorder the stages atomically, move leads between stages, and read a per-stage lead count calculated by the database. A pipeline stage is separate from the lead's `status`
+- **Tasks:** create, assign, update and delete an organization's tasks (status, due date, search, filters including a derived overdue filter, pagination). Tasks are only ever visible to members of their own organization, and can only be assigned to a member
 - **Organizations:** create an organization, invite people with a one-time token, and manage members with per-organization roles (`OWNER`, `ADMIN`, `MEMBER`) that are checked against the database on every request
 
 ## Quick start
@@ -93,6 +94,11 @@ All routes are under `/api/v1`.
 | PATCH | `/organizations/:organizationId/pipelines/:pipelineId/stages/reorder` | `OWNER`, `ADMIN` | Reorder all stages atomically |
 | PATCH | `/organizations/:organizationId/pipelines/:pipelineId/stages/:stageId` | `OWNER`, `ADMIN` | Rename a stage |
 | DELETE | `/organizations/:organizationId/pipelines/:pipelineId/stages/:stageId` | `OWNER`, `ADMIN` | Delete a stage (only while it holds no leads) |
+| POST | `/organizations/:organizationId/tasks` | member | Create a task |
+| GET | `/organizations/:organizationId/tasks` | member | List tasks: `page`, `limit`, `search`, `status`, `assignedToUserId`, `dueFrom`, `dueTo`, `overdue`, `sortBy`, `sortOrder` |
+| GET | `/organizations/:organizationId/tasks/:taskId` | member | One task |
+| PATCH | `/organizations/:organizationId/tasks/:taskId` | member | Update a task, change its status or assign it |
+| DELETE | `/organizations/:organizationId/tasks/:taskId` | `OWNER`, `ADMIN` | Delete a task |
 
 Tokens are sent as `Authorization: Bearer <token>`. Full request and response details, error codes and a client integration guide are in the documentation.
 
@@ -145,12 +151,14 @@ Business logic (`domain/`, `application/`) never imports Express, Prisma, `jsonw
 - [Customers](documentation/customers.md): organization-scoped customers, permissions, list query, tenant isolation and its tests
 - [Leads](documentation/leads.md): organization-scoped leads, assignment, conversion into customers, permissions, list query and its tests
 - [Sales Pipelines](documentation/pipelines.md): pipelines and ordered stages on top of leads, the atomic reorder, moving leads, the per-stage summary, permissions and its tests
+- [Tasks](documentation/tasks.md): organization-scoped tasks, assignment, status, due dates and the overdue filter, permissions, list query and its tests
 - [User Management](documentation/user-management.md): profile, account update, password change, account status and its effect on login and refresh
 - [Feature contract: authentication](docs/feature-contracts/20261001073651-authentication-authorization.md): the agreed specification this implementation follows
 - [Feature contract: organizations](docs/feature-contracts/20261001103000-organizations.md): the agreed specification for organizations
 - [Feature contract: customers](docs/feature-contracts/20261001150000-customer-management.md): the agreed specification for customer management
 - [Feature contract: leads](docs/feature-contracts/20261001170000-lead-management.md): the agreed specification for lead management
 - [Feature contract: sales pipeline](docs/feature-contracts/20261001190000-sales-pipeline.md): the agreed specification for sales pipelines
+- [Feature contract: tasks](docs/feature-contracts/20261001210000-task-management.md): the agreed specification for task management
 - [Feature contract: user management](docs/feature-contracts/20261001120000-user-management.md): the agreed specification for user management
 
 ## Known limitations
